@@ -1,0 +1,102 @@
+DEBUG (Telefona hızlı yüklemek)
+flutter run
+
+veya
+
+flutter build apk --debug
+
+APK çıkar:
+
+build/app/outputs/flutter-apk/app-debug.apk
+🚀 RELEASE (Gerçek performans için)
+flutter build apk --release
+
+APK konumu:
+
+build/app/outputs/flutter-apk/app-release.apk
+🏪 Play Store için (App Bundle önerilir)
+flutter build appbundle --release
+
+Çıktı:
+
+build/app/outputs/bundle/release/app-release.aab
+
+Play Store için genelde .aab yüklenir.
+
+⚠️ İlk defa release alıyorsan
+
+Şu soruyu sorayım:
+
+👉 Keystore oluşturduk mu?
+Yoksa debug key ile mi devam edeceğiz?
+
+Eğer sadece test içinse, direkt:
+
+flutter build apk --release
+
+çalışır.
+
+
+*****************
+
+Store’a hazırlık için en doğru sırayla backlog
+1) Kimlik ve paketleme (kolay)
+
+Launcher adı ✅ (Find Lost Gadget)
+
+App icon
+
+Splash (opsiyonel)
+
+Versioning (1.0.0+1 vs)
+
+2) “İlk açılış” onboarding (kritik)
+
+Neden izin istiyoruz?
+
+Bluetooth kapalıysa ne yapmalı?
+
+“Start Scan” açıklaması
+
+3) Güven/uyum (store için şart)
+
+Privacy Policy (basit bir sayfa bile yeter)
+
+“We don’t collect data” gibi net metin
+
+GitHub link / contact mail
+
+4) Kalite (puanı belirler)
+
+RSSI smoothing (zıplamayı azalt)
+
+OUT OF RANGE mantığı daha akıllı
+
+“Lock to device” davranışı net
+
+Seninle şimdi bir “milestone” koyalım
+
+Benim önerim:
+
+✅ v0.2 (Internal Beta)
+
+Find Mode + beep + mute + stable list (şu an buradayız)
+
+🎯 v0.3 (Store-ready Beta)
+
+Onboarding + icon + privacy + basic smoothing
+
+🚀 v1.0 (Public)
+
+Smoothing + lock mode + lab mode + güzel polish
+
+İstersen şimdi (maç modunu bozmadan) bir sonraki teknik adıma geçelim:
+
+Sıradaki en değerli geliştirme bence:
+
+RSSI smoothing (filtre)
+Çünkü şu an en çok “hissedilen” kalite artışı bu.
+
+Devam edelim mi?
+
+“Evet smoothing” de, ben sana minimal ve sağlam bir filtre (EMA + outlier reject) ekleyeyim.
