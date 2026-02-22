@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 // Global mute across Find Mode pages
 ValueNotifier<bool> globalMute = ValueNotifier(false);
+final Map<String, int> calibratedMaxById = {};
 
 void main() {
   runApp(const FindLostGadgetApp());
@@ -25,7 +26,6 @@ class FindLostGadgetApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
-        fontFamily: null,
       ),
       home: const HomePage(),
     );
@@ -305,24 +305,25 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
       devices.add(r);
     }
 
-    final bg = Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFF081018),
-            Color(0xFF081A24),
-            Color(0xFF070E14),
-          ],
-        ),
-      ),
-    );
-
     return Scaffold(
       body: Stack(
         children: [
-          Positioned.fill(child: bg),
+          // Background
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFF081018),
+                    Color(0xFF081A24),
+                    Color(0xFF070E14),
+                  ],
+                ),
+              ),
+            ),
+          ),
 
           // Ambient radar background while scanning
           Positioned.fill(
@@ -451,8 +452,10 @@ class FindModePage extends StatefulWidget {
 }
 
 class _FindModePageState extends State<FindModePage> with TickerProviderStateMixin {
+  // RSSI smoothing in find mode too
   double? _ema;
   int? _rssi;
+
   int _lastSeenMs = 0;
   int _lastPulseMs = 0;
 
@@ -467,9 +470,29 @@ class _FindModePageState extends State<FindModePage> with TickerProviderStateMix
 
   static const int staleAfterMs = 3500;
 
+  // ===== Auto-calibration =====
+  static const int _minRssi = -85; // left side label (far reference)
+  final int _calWindowMs = 2000; // 2s calibration window
+  final int _calMarginDb = 6; // headroom above peak
+  int _calStartMs = 0;
+  
+  int _calPeakRssi = -999; // best (highest) rssi observed
+  int _calMaxRssi = -45; // dynamic right side label (near reference)
+  bool _calibrating = true;
+
   @override
   void initState() {
     super.initState();
+  final cached = calibratedMaxById[widget.deviceId];
+  if (cached != null) {
+   _calMaxRssi = cached;
+   _calibrating = false;
+ } else {
+  _calibrating = true;
+ }
+
+    _calStartMs = DateTime.now().millisecondsSinceEpoch;
+    _calibrating = true;
 
     _sweepCtrl =
         AnimationController(vsync: this, duration: const Duration(milliseconds: 1700))..repeat();
@@ -486,20 +509,49 @@ class _FindModePageState extends State<FindModePage> with TickerProviderStateMix
 
     _sub = FlutterBluePlus.scanResults.listen((results) {
       final now = DateTime.now().millisecondsSinceEpoch;
-      for (final r in results) {
-        if (r.device.remoteId.str == widget.deviceId) {
-          // EMA smoothing
-          const double alpha = 0.25;
-          final raw = r.rssi.toDouble();
-          _ema = (_ema == null) ? raw : (alpha * raw) + ((1 - alpha) * _ema!);
 
-          _rssi = _ema!.round();
-          _lastSeenMs = now;
-          break;
+      for (final r in results) {
+        if (r.device.remoteId.str != widget.deviceId) continue;
+
+        // EMA smoothing
+        const double alpha = 0.25;
+        final raw = r.rssi.toDouble();
+        _ema = (_ema == null) ? raw : (alpha * raw) + ((1 - alpha) * _ema!);
+
+        _rssi = _ema!.round();
+        _lastSeenMs = now;
+
+        // --- Auto calibration update ---
+        if (_calibrating && _rssi != null) {
+          if (_rssi! > _calPeakRssi) _calPeakRssi = _rssi!;
+
+          final candidate = _calPeakRssi + _calMarginDb;
+
+          // clamp: don't go too optimistic; don't make it too low either
+          _calMaxRssi = candidate.clamp(-45, -30);
+		  
+
+          if (now - _calStartMs >= _calWindowMs) {
+            _calibrating = false;
+			final prev = calibratedMaxById[widget.deviceId];
+if (prev == null || _calMaxRssi > prev) {
+  calibratedMaxById[widget.deviceId] = _calMaxRssi;
+}
+          }
         }
+
+        break;
       }
+
       if (mounted) setState(() {});
     });
+  double _rssiToFill(int rssi) {
+  final minRssi = _minRssi;
+  final maxRssi = _calMaxRssi;
+
+  final clamped = rssi.clamp(minRssi, maxRssi);
+  return (clamped - minRssi) / (maxRssi - minRssi);
+}
 
     _tick = Timer.periodic(const Duration(milliseconds: 60), (_) async {
       if (!mounted) return;
@@ -509,13 +561,13 @@ class _FindModePageState extends State<FindModePage> with TickerProviderStateMix
       final ageMs = hasSeen ? (now - _lastSeenMs) : 999999;
       final stale = ageMs > staleAfterMs;
 
-      // Device not seen => silence
+      // If not seeing device -> SILENCE (invalidate RSSI)
       if (!hasSeen || stale || _rssi == null) {
         _rssi = null;
         return;
       }
 
-      // Logarithmic mapping in [-85 .. -45]
+      // Logarithmic mapping in [_minRssi .. _calMaxRssi]
       final progress = _rssiToLogProgress(_rssi!);
       final intervalMs = _progressToIntervalMs(progress);
       final volume = _progressToVolume(progress);
@@ -547,12 +599,13 @@ class _FindModePageState extends State<FindModePage> with TickerProviderStateMix
 
   double _clamp01(double x) => x < 0 ? 0 : (x > 1 ? 1 : x);
 
-  /// RSSI (-85..-45) -> progress (0..1) logarithmic
+  /// RSSI -> progress (0..1) using dynamic max RSSI from calibration
   double _rssiToLogProgress(int rssi) {
-    const int minRssi = -85;
-    const int maxRssi = -45;
+    final minRssi = _minRssi;
+    final maxRssi = _calMaxRssi; // dynamic near reference
 
     final x = _clamp01((rssi - minRssi) / (maxRssi - minRssi));
+
     const double k = 9.0; // bigger => more kick near close range
     return math.log(1 + k * x) / math.log(1 + k);
   }
@@ -577,6 +630,7 @@ class _FindModePageState extends State<FindModePage> with TickerProviderStateMix
   }
 
   double _rssiToFill(int rssi) {
+    // keep visual fill stable; use calibration references for "feel"
     final clamped = rssi.clamp(-100, -45);
     return (clamped + 100) / 55.0;
   }
@@ -693,14 +747,36 @@ class _FindModePageState extends State<FindModePage> with TickerProviderStateMix
                   _PlayCard(
                     child: Column(
                       children: [
-                        Text(
-                          label,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.92),
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.0,
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                label,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.92),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                            ),
+                            if (_calibrating)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(999),
+                                  color: Colors.white.withValues(alpha: 0.06),
+                                ),
+                                child: Text(
+                                  "Calibrating…",
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.75),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                         const SizedBox(height: 12),
                         Text(
@@ -711,7 +787,31 @@ class _FindModePageState extends State<FindModePage> with TickerProviderStateMix
                             fontWeight: FontWeight.w900,
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 14),
+
+                        // ===== Test labels: min/max around bar =====
+                        Row(
+                          children: [
+                            Text(
+                              "$_minRssi",
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.45),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              "$_calMaxRssi",
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.45),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
 
                         // Classic bar (left -> right)
                         Container(
@@ -753,7 +853,9 @@ class _FindModePageState extends State<FindModePage> with TickerProviderStateMix
                     valueListenable: globalMute,
                     builder: (_, muted, __) {
                       return Text(
-                        muted ? "Muted" : "Beep gets faster & louder as you get closer",
+                        muted
+                            ? "Muted"
+                            : "Beep gets faster & louder as you get closer",
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.45),
@@ -1028,6 +1130,9 @@ class _DeviceCardPlayful extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // bar width adapted to screen
+    final barWidth = MediaQuery.of(context).size.width - 32 - 28;
+
     return InkWell(
       borderRadius: BorderRadius.circular(22),
       onTap: onTap,
@@ -1134,7 +1239,7 @@ class _DeviceCardPlayful extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 140),
-                    width: (MediaQuery.of(context).size.width - 32 - 28) * barFill.clamp(0.0, 1.0),
+                    width: barWidth * barFill.clamp(0.0, 1.0),
                     color: accent.withValues(alpha: stale ? 0.18 : 0.95),
                   ),
                 ),
