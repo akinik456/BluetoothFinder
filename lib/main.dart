@@ -565,23 +565,22 @@ class _FindModePageState extends State<FindModePage>
   static const int staleAfterMs = 3500;
 
   // ===== Auto-calibration =====
-  static const int _minRssi = -85; // far reference (left label)
+  static const int _minRssi = -85; // left side label (far reference)
   final int _calWindowMs = 2000; // 2s calibration window
   final int _calMarginDb = 6; // headroom above peak
   int _calStartMs = 0;
-
+  
   int _calPeakRssi = -999; // best (highest) rssi observed
-  int _calMaxRssi = -45; // dynamic near reference (right label)
+  int _calMaxRssi = -45; // dynamic right side label (near reference)
   bool _calibrating = true;
 
-  // Beep üretimini lifecycle ile anında kapatmak için
-  bool _beepEnabled = true;
+int _beepGen = 0; // kill-switch jenerasyonu
+bool _beepEnabled = true;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-
+WidgetsBinding.instance.addObserver(this);
     final now = DateTime.now().millisecondsSinceEpoch;
 
     // Restore best-so-far calibration if present
@@ -596,24 +595,60 @@ class _FindModePageState extends State<FindModePage>
       _calibrating = true;
     }
 
-    _sweepCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1700),
-    )..repeat();
-
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2300),
-    )..repeat();
+    _sweepCtrl =
+        AnimationController(vsync: this, duration: const Duration(milliseconds: 1700))..repeat();
+    _pulseCtrl =
+        AnimationController(vsync: this, duration: const Duration(milliseconds: 2300))..repeat();
 
     _player = AudioPlayer();
+	BeepGuard.register(_player);
     _player.setReleaseMode(ReleaseMode.stop);
     _player.setVolume(1.0);
+
     _player.setSource(AssetSource('beep.mp3')).then((_) {
       _audioReady = true;
     });
+Future<void> _hardStopFindMode() async {
+BeepGuard.killNow();
+try { await _player.stop(); } catch (_) {}
+try { await _player.seek(Duration.zero); } catch (_) {}
 
-    // Listen scan results for this device
+  // 1) Beep üretimini durdur (tick)
+  _tick?.cancel();
+  _tick = null;
+
+  // 2) Scan sonuçlarını dinlemeyi kes (sub)
+  await _sub?.cancel();
+  _sub = null;
+
+  // 3) Çalan sesi anında kes
+  try { await _player.stop(); } catch (_) {}
+
+  // 4) BLE scan'i durdur (Home zaten durduruyor ama garanti olsun)
+  try { await FlutterBluePlus.stopScan(); } catch (_) {}
+
+  // 5) UI/State'i sessize al (stale/son beep kalmasın)
+  _ema = null;
+  _rssi = null;
+  _lastSeenMs = 0;
+  _lastPulseMs = 0;
+
+  if (mounted) setState(() {});
+}
+
+@override
+void didChangeAppLifecycleState(AppLifecycleState state) {
+BeepGuard.killNow();
+  if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
+    unawaited(_hardStopFindMode());
+    return;
+  }
+
+  if (state == AppLifecycleState.resumed) {
+    // Geri gelince de OFF/sessiz kalsın -> hiçbir şey başlatmıyoruz.
+  }
+}
+
     _sub = FlutterBluePlus.scanResults.listen((results) {
       final now = DateTime.now().millisecondsSinceEpoch;
 
@@ -623,101 +658,85 @@ class _FindModePageState extends State<FindModePage>
         // EMA smoothing
         const double alpha = 0.25;
         final raw = r.rssi.toDouble();
-        _ema = (_ema == null) ? raw : (_ema! * (1 - alpha) + raw * alpha);
-        _rssi = _ema!.round();
+        _ema = (_ema == null) ? raw : (alpha * raw) + ((1 - alpha) * _ema!);
 
+        _rssi = _ema!.round();
         _lastSeenMs = now;
 
-        // Calibration peak update
-        if (_calibrating) {
-          if (r.rssi > _calPeakRssi) _calPeakRssi = r.rssi;
+        // --- Auto calibration update (best-so-far) ---
+        if (_rssi != null) {
+          if (_calibrating) {
+            if (_rssi! > _calPeakRssi) _calPeakRssi = _rssi!;
 
-          // window complete?
-          if (now - _calStartMs >= _calWindowMs) {
-            // dynamic max is peak + margin (cap at -35 just in case)
-            _calMaxRssi = (_calPeakRssi + _calMarginDb).clamp(-80, -35);
-            _calibrating = false;
-            _persistCalibrationIfBetter();
-          }
-        } else {
-          // best-so-far upgrade while running (auto-calibration best-so-far)
-          final candidate = (r.rssi + _calMarginDb).clamp(-80, -35);
-          if (candidate > _calMaxRssi) {
-            _calMaxRssi = candidate;
-            _persistCalibrationIfBetter();
+            final candidate = (_calPeakRssi + _calMarginDb).clamp(-45, -30);
+            if (candidate > _calMaxRssi) _calMaxRssi = candidate;
+
+            if (now - _calStartMs >= _calWindowMs) {
+              _calibrating = false;
+              _persistCalibrationIfBetter();
+            }
+          } else {
+            // After initial window: keep upgrading if we ever see a better (closer) RSSI.
+            final candidate = (_rssi! + _calMarginDb).clamp(-45, -30);
+            if (candidate > _calMaxRssi) {
+              _calMaxRssi = candidate;
+              _persistCalibrationIfBetter();
+            }
           }
         }
 
-        if (mounted) setState(() {});
+        break;
       }
-    });
 
-    // Beep tick loop (only while page is active and enabled)
-    _tick = Timer.periodic(const Duration(milliseconds: 120), (_) async {
+      if (mounted) setState(() {});
+    });
+	
+	
+    _tick = Timer.periodic(const Duration(milliseconds: 60), (_) async {
       if (!mounted) return;
-      if (!_beepEnabled) return;
 
       final now = DateTime.now().millisecondsSinceEpoch;
-
-      // stale -> no beep
       final hasSeen = _lastSeenMs != 0;
       final ageMs = hasSeen ? (now - _lastSeenMs) : 999999;
-      if (ageMs > staleAfterMs) return;
+      final stale = ageMs > staleAfterMs;
 
-      if (_rssi == null) return;
-      if (globalMute.value) return;
-      if (!_audioReady) return;
+      // If not seeing device -> SILENCE (invalidate RSSI)
+      if (!hasSeen || stale || _rssi == null) {
+        _rssi = null;
+        return;
+      }
 
+      // Logarithmic mapping in [_minRssi .. _calMaxRssi]
       final progress = _rssiToLogProgress(_rssi!);
       final intervalMs = _progressToIntervalMs(progress);
       final volume = _progressToVolume(progress);
 
-      if (now - _lastPulseMs < intervalMs) return;
-      _lastPulseMs = now;
+      if (now - _lastPulseMs >= intervalMs) {
+        _lastPulseMs = now;
 
-      // Lifecycle tam arada kapatırsa drop
-      if (!_beepEnabled) return;
+        final int g = BeepGuard.gen;
 
-      try {
-        await _player.stop();
-        if (!_beepEnabled) return;
-        await _player.play(
-          AssetSource('beep.mp3'),
-          volume: volume,
-        );
-      } catch (_) {}
+
+print("BEEP TRY enabled=${BeepGuard.enabled} gen=${BeepGuard.gen} ready=$_audioReady mute=${globalMute.value}");
+if (!BeepGuard.enabled || globalMute.value || !_audioReady) return;
+
+// Home/kilit tam arada geldiyse düşür
+if (!BeepGuard.enabled || g != BeepGuard.gen) return;
+
+await _player.setVolume(volume);
+
+if (!BeepGuard.enabled || g != BeepGuard.gen) return;
+await _player.stop();
+
+if (!BeepGuard.enabled || g != BeepGuard.gen) return;
+await _player.play(
+    AssetSource('beep.mp3'),
+    volume: volume,
+  );
+
+
+      }
     });
-  }
-
-  Future<void> _hardStopFindMode() async {
-    _beepEnabled = false;
-
-    _tick?.cancel();
-    _tick = null;
-
-    await _sub?.cancel();
-    _sub = null;
-
-    try {
-      await _player.stop();
-      await _player.seek(Duration.zero);
-    } catch (_) {}
-
-    try { await FlutterBluePlus.stopScan(); } catch (_) {}
-
-    _ema = null;
-    _rssi = null;
-    _lastSeenMs = 0;
-    _lastPulseMs = 0;
-
-    if (mounted) setState(() {});
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive || state == AppLifecycleState.paused) {
-      unawaited(_hardStopFindMode());
-    }
   }
 
   void _persistCalibrationIfBetter() {
@@ -727,7 +746,21 @@ class _FindModePageState extends State<FindModePage>
     }
   }
 
-double _clamp01(double x) => x < 0 ? 0 : (x > 1 ? 1 : x);
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    _tick?.cancel();
+    _player.dispose();
+    _sweepCtrl.dispose();
+    _pulseCtrl.dispose();
+	WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // --- mapping helpers (log) ---
+
+  double _clamp01(double x) => x < 0 ? 0 : (x > 1 ? 1 : x);
 
   /// RSSI -> progress (0..1) using dynamic max RSSI from calibration
   double _rssiToLogProgress(int rssi) {
@@ -1006,17 +1039,6 @@ double _clamp01(double x) => x < 0 ? 0 : (x > 1 ? 1 : x);
         ],
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _sub?.cancel();
-    _tick?.cancel();
-    try { _player.dispose(); } catch (_) {}
-    _sweepCtrl.dispose();
-    _pulseCtrl.dispose();
-    super.dispose();
   }
 }
 
