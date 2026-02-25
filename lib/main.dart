@@ -561,7 +561,44 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                     onToggle: _toggleScan,
                   ),
                 ),
+				const SizedBox(height: 6),
 
+Padding(
+  padding: const EdgeInsets.symmetric(horizontal: 16),
+  child: Row(
+    mainAxisAlignment: MainAxisAlignment.center,
+    children: [
+      Text(
+        "Tap for details",
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Colors.white.withValues(alpha: 0.55),
+          letterSpacing: 0.2,
+        ),
+      ),
+      const SizedBox(width: 8),
+      Text(
+        "•",
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.35),
+        ),
+      ),
+      const SizedBox(width: 8),
+      Text(
+        "Hold to find",
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: Colors.white.withValues(alpha: 0.55),
+          letterSpacing: 0.2,
+        ),
+      ),
+    ],
+  ),
+),
+
+const SizedBox(height: 6),
                 // Device list
                 Expanded(
                   child: Padding(
@@ -1166,7 +1203,7 @@ class _HeaderPlayful extends StatelessWidget {
   Widget build(BuildContext context) {
     final subtitle = isScanning
         ? "Scanning • $deviceCount device${deviceCount == 1 ? "" : "s"}"
-        : "Idle • Start scan to discover devices";
+        : "Start scan to discover devices";
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
@@ -1206,13 +1243,14 @@ class _HeaderPlayful extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+			  
                 const Text(
                   "Find Lost Gadget",
                   style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20.5,
+                    color: const Color(0xFF4FD1FF),
+                    fontSize: 24,
                     fontWeight: FontWeight.w900,
                     letterSpacing: 0.3,
                   ),
@@ -1222,10 +1260,11 @@ class _HeaderPlayful extends StatelessWidget {
                   subtitle,
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.62),
-                    fontSize: 12.8,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+				
               ],
             ),
           ),
@@ -1306,7 +1345,7 @@ class _ScanPanelPlayful extends StatelessWidget {
               isScanning ? "Tap to stop scanning" : "Tap to start scanning",
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.70),
-                fontSize: 13,
+                fontSize: 16,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -1527,11 +1566,11 @@ class _DeviceCardPlayful extends StatelessWidget {
                   ),
                 ),
 
-                const SizedBox(width: 8),
-
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
+                SizedBox(
+  width: 70,
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
                     Text(
                       rssi == null ? "—" : "$rssi",
                       style: TextStyle(
@@ -1552,6 +1591,7 @@ class _DeviceCardPlayful extends StatelessWidget {
                     ),
                   ],
                 ),
+				),
               ],
             ),
             const SizedBox(height: 12),

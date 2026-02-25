@@ -1,51 +1,48 @@
-# BluetoothFinder – DEV_CONTEXT.md
+# BluetoothFinder – DEV CONTEXT
 
-## Current Stable Base
-Branch: feature/playful-ui-log-beep  
-Audio: main_audio_fixed2 tabanlı stabil sürüm  
-Beep: WAV sonar pulse (B version)  
-Beep engine: seek + resume, no play reset  
-Lifecycle: Home + Lock → Hard stop (0 trailing beep)
+## Base
+- Branch: feature/playful-ui-log-beep
+- Base version: audio-stable (main_audio_fixed2 lineage)
+- Beep system is STABLE and must NOT break.
 
-## Product Identity
-App type: Personal Device Finder (NOT generic BLE scanner)
+## Core Identity
+- App name: Find Lost Gadget
+- Playful UI style
+- Dark theme (Material3)
+- Finder identity preserved
+- No unnecessary rewrites
 
-Core Philosophy:
-- User tracks their own gadgets
-- Saved devices are persistent
-- Clean, minimal, playful UI
-- No background scanning
-- Scan only when user presses Start
+## Current Architecture
 
-## UX Rules
-- Tap → Toggle details
-- Long press → Enter Find Mode
-- Saved devices pinned to top
-- Saved devices remain in list even if out of range
-- 12s stale threshold
+### Device Card
+- StatelessWidget: _DeviceCardPlayful
+- Left accent border when saved
+- Bookmark quick-toggle button
+- RSSI + distanceLabel fixed width panel
+- Playful proximity bar (AnimatedContainer)
+- Tap → Details
+- Long press → Find mode
 
-## Audio Rules
-- Short sonar pulse (≈50ms WAV)
-- No overlapping pulses
-- No MP3
-- Deterministic playback
-- Hard stop on lifecycle change
+### Save System
+- Persistent using SharedPreferences
+- SavedDevice model
+- SavedStore load/save
+- Saved devices pinned first in list
+- Bookmark icon toggles save state
 
-## Tech Stack
-- Flutter
-- flutter_blue_plus
-- shared_preferences
-- Single main.dart architecture
-- No over-engineering
+### UX Rules
+- Compile-safe after each step
+- No large rewrites
+- Minimal layout instability
+- Beep must remain untouched
 
-## Non-Negotiables
-- Beep must never randomly break again
-- Lifecycle must always hard-stop scan + audio
-- No silent refactor without confirmation
-- User must explicitly approve structural changes
+## Next Potential Improvements
+- Saved devices persist even when out-of-range
+- Subtle typography polish
+- RSSI monospace option
+- First-run gesture hint fade
 
-## Current Goal
-Rebuild save system on top of audio-stable base
-Step-by-step
-No large rewrites
-Compile-safe after each step
+## DO NOT TOUCH
+- FindModePage audio logic
+- Beep timing logic
+- Scan lifecycle stability
