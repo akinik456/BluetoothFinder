@@ -100,3 +100,22 @@ RSSI smoothing (filtre)
 Devam edelim mi?
 
 “Evet smoothing” de, ben sana minimal ve sağlam bir filtre (EMA + outlier reject) ekleyeyim.
+******************
+BluetoothFinder – clean rebuild phase.
+
+Branch: feature/playful-ui-log-beep
+Base version: audio-stable (main_audio_fixed2 lineage)
+Beep is working and must NOT break.
+
+Goal:
+Rebuild persistent save system on top of stable audio base.
+Step-by-step.
+Compile-safe after each step.
+No large rewrites.
+
+DEV_CONTEXT.md is active.
+Playful UI preserved.
+Finder identity preserved.
+
+Let’s proceed carefully.
+********************

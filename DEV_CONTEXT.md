@@ -1,109 +1,51 @@
-# Find Lost Gadget (BLF) – Dev Context
+# BluetoothFinder – DEV_CONTEXT.md
 
-## Project Identity
-- App Name: Find Lost Gadget
-- Flutter BLE scanning app
-- Android target: Android 12+
-- Single-file architecture (lib/main.dart)
+## Current Stable Base
+Branch: feature/playful-ui-log-beep  
+Audio: main_audio_fixed2 tabanlı stabil sürüm  
+Beep: WAV sonar pulse (B version)  
+Beep engine: seek + resume, no play reset  
+Lifecycle: Home + Lock → Hard stop (0 trailing beep)
 
----
+## Product Identity
+App type: Personal Device Finder (NOT generic BLE scanner)
 
-## Core Purpose
-Help user find their own Bluetooth device
-(earbuds, watch, tablet, etc.)
+Core Philosophy:
+- User tracks their own gadgets
+- Saved devices are persistent
+- Clean, minimal, playful UI
+- No background scanning
+- Scan only when user presses Start
 
-NOT a generic BLE scanner.
-UX goal: clean, focused, modern.
+## UX Rules
+- Tap → Toggle details
+- Long press → Enter Find Mode
+- Saved devices pinned to top
+- Saved devices remain in list even if out of range
+- 12s stale threshold
 
----
+## Audio Rules
+- Short sonar pulse (≈50ms WAV)
+- No overlapping pulses
+- No MP3
+- Deterministic playback
+- Hard stop on lifecycle change
 
-## Current Architecture
-
-### BLE
+## Tech Stack
+- Flutter
 - flutter_blue_plus
-- lowLatency mode
-- continuousUpdates: true
-- continuousDivisor: 1
+- shared_preferences
+- Single main.dart architecture
+- No over-engineering
 
-### Device List (Home)
-- EMA RSSI smoothing (alpha ≈ 0.25)
-- If a card is open:
-  - Pin to top
-  - Disable re-sorting
-- Stale devices fade & show OUT OF RANGE
-- Drop device after long timeout
+## Non-Negotiables
+- Beep must never randomly break again
+- Lifecycle must always hard-stop scan + audio
+- No silent refactor without confirmation
+- User must explicitly approve structural changes
 
----
-
-## Find Mode
-
-### Visual
-- Playful modern UI
-- Ambient radar background
-  - No static rings
-  - No crosshair
-  - No outer circle
-  - Pulse ring active
-  - Sweep alpha ≈ 0.05
-
-### Audio
-- audioplayers
-- asset: assets/beep.mp3
-- Beep only when device actively seen
-- Global mute (ValueNotifier<bool>)
-
-### RSSI Processing
-- EMA smoothing
-- Logarithmic mapping:
-  - progress = log curve (k ≈ 9.0)
-  - interval: 1100ms → 90ms
-  - volume: 0.15 → 1.0
-
----
-
-## Auto Calibration (Important)
-
-### Goal
-Best-so-far calibration per device.
-
-If a better (closer) RSSI is observed:
-→ Update reference.
-If worse:
-→ Do NOT downgrade reference.
-
-### Config
-- minRssi = -85
-- calibration window ≈ 2000ms
-- margin ≈ +6dB
-- max clamp: -45 .. -30
-- cache: calibratedMaxById[deviceId]
-
-### UX Intent
-Once device seen very close (e.g. -30),
-that becomes permanent reference
-unless an even better value is seen.
-
----
-
-## Design Philosophy
-- No "DOS style" borders
-- Section separation via tone & depth
-- Playful but premium
-- Clean scanning experience
-
----
-
-## Known Tunables
-- EMA alpha
-- log curve k
-- calibration margin
-- interval range
-- volume range
-
----
-
-## Next Phase (To Decide)
-- Filtering strategy for noisy environments
-- Performance optimization
-- Store preparation
-- Advanced distance modeling
+## Current Goal
+Rebuild save system on top of audio-stable base
+Step-by-step
+No large rewrites
+Compile-safe after each step

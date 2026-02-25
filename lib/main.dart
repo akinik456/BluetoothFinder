@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:io';
+import 'dart:convert';
+import 'package:flutter/services.dart';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -37,6 +40,70 @@ class BeepGuard {
   static void arm() {
     enabled = true;
     gen++;
+  }
+}
+// ===================== SAVED DEVICES (PERSISTENT) =====================
+
+class SavedDevice {
+  final String id;
+  final String? name;
+  final int savedAtMs;
+
+  const SavedDevice({
+    required this.id,
+    required this.savedAtMs,
+    this.name,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'savedAtMs': savedAtMs,
+      };
+
+  static SavedDevice fromJson(Map<String, dynamic> j) {
+    return SavedDevice(
+      id: (j['id'] ?? '').toString(),
+      name: (j['name'] as String?)?.toString(),
+      savedAtMs: (j['savedAtMs'] is int)
+          ? (j['savedAtMs'] as int)
+          : int.tryParse('${j['savedAtMs']}') ?? 0,
+    );
+  }
+}
+
+class SavedStore {
+  static const String _key = 'bluetoothfinder_saved_devices_v1';
+
+  static Future<Map<String, SavedDevice>> load() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_key);
+    if (raw == null || raw.trim().isEmpty) return {};
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return {};
+
+      final out = <String, SavedDevice>{};
+      for (final item in decoded) {
+        if (item is! Map) continue;
+        final m = Map<String, dynamic>.from(item as Map);
+        final d = SavedDevice.fromJson(m);
+        if (d.id.isNotEmpty) out[d.id] = d;
+      }
+      return out;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<void> save(Map<String, SavedDevice> map) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = map.values
+        .map((d) => d.toJson())
+        .toList(growable: false);
+
+    await prefs.setString(_key, jsonEncode(list));
   }
 }
 class FindLostGadgetApp extends StatelessWidget {
@@ -92,6 +159,8 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
   // Stability thresholds
   static const int staleAfterMs = 5000;
   static const int dropAfterMs = 30000;
+  
+  Map<String, SavedDevice> _saved = {};  
 
   @override
   void initState() {
@@ -130,6 +199,8 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
         final prev = _rssiEma[id];
         _rssiEma[id] = (prev == null) ? raw : (alpha * raw) + ((1 - alpha) * prev);
       }
+	  
+	  
 
       // housekeeping
       _orderIds.removeWhere((id) => !_latest.containsKey(id));
@@ -140,7 +211,11 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
       // If a card is open, pin it to top and disable sorting (keep the rest stable)
       if (_expandedId == null) {
         final entries = _latest.entries.toList();
-        entries.sort((a, b) {
+                entries.sort((a, b) {
+          final aSaved = _saved.containsKey(a.key);
+          final bSaved = _saved.containsKey(b.key);
+          if (aSaved != bSaved) return aSaved ? -1 : 1;
+
           final ar = (_rssiEma[a.key]?.round()) ?? a.value.rssi;
           final br = (_rssiEma[b.key]?.round()) ?? b.value.rssi;
           return br.compareTo(ar);
@@ -164,6 +239,12 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
       setState(() {});
     });
   }
+  Future<void> _loadSaved() async {
+    final loaded = await SavedStore.load();
+    if (!mounted) return;
+    setState(() => _saved = loaded);
+  }  
+  
 
   @override
   void dispose() {
@@ -371,7 +452,28 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
       }
     });
   }
+    bool _isSaved(String id) => _saved.containsKey(id);
 
+    Future<void> _toggleSaved({required String id, required String? name}) async {
+    final next = Map<String, SavedDevice>.from(_saved);
+
+    final wasSaved = next.containsKey(id);
+    if (wasSaved) {
+      next.remove(id);
+    } else {
+      next[id] = SavedDevice(
+        id: id,
+        name: (name ?? '').trim().isEmpty ? null : name!.trim(),
+        savedAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
+    }
+
+    // Haptic: subtle, consistent
+    HapticFeedback.heavyImpact();
+
+    setState(() => _saved = next);
+    await SavedStore.save(next);
+  }
   // -------- UI --------
 
   @override
@@ -472,7 +574,8 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                             itemBuilder: (context, i) {
                               final r = devices[i];
                               final id = r.device.remoteId.str;
-
+							  final saved = _saved.containsKey(id);
+								
                               final name = (r.device.platformName).trim();
                               final title = name.isEmpty ? "Unknown" : name;
 
@@ -490,10 +593,13 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                               final barFill = stale ? 0.0 : _rssiToFill(smoothRssi);
                               final label = stale ? "OUT OF RANGE" : _rssiToDistanceLabel(smoothRssi);
                               final displayRssi = stale ? null : smoothRssi;
+							  //final saved = _isSaved(id);
 
                               return Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 7),
                                 child: _DeviceCardPlayful(
+								  isSaved: saved,
+								  onToggleSaved: () => _toggleSaved(id: id, name: title),
                                   title: title,
                                   id: id,
                                   accent: accent,
@@ -502,8 +608,8 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                                   distanceLabel: label,
                                   barFill: barFill,
                                   isOpen: isOpen,
-                                  onTap: () => _enterFindMode(r),
-                                  onLongPress: () => _toggleDetails(id),
+								  onTap: () => _toggleDetails(id),
+                                  onLongPress: () => _enterFindMode(r),
                                   details: isOpen
                                       ? _DeviceDetails(
                                           connectable: adv.connectable,
@@ -511,7 +617,9 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                                           uuids: adv.serviceUuids,
                                           manufacturerIds: adv.manufacturerData.keys.toList(),
                                           lastSeenSeconds: ((now - (_lastSeenMs[id] ?? now)) ~/ 1000),
-                                        )
+                                          isSaved: saved,
+										  onToggleSaved: () => _toggleSaved(id: id, name: title),
+										)
                                       : null,
                                 ),
                               );
@@ -605,7 +713,7 @@ WidgetsBinding.instance.addObserver(this);
     _player.setReleaseMode(ReleaseMode.stop);
     _player.setVolume(1.0);
 
-    _player.setSource(AssetSource('beep.mp3')).then((_) {
+    _player.setSource(AssetSource('beep.wav')).then((_) {
       _audioReady = true;
     });
 Future<void> _hardStopFindMode() async {
@@ -730,7 +838,7 @@ await _player.stop();
 
 if (!BeepGuard.enabled || g != BeepGuard.gen) return;
 await _player.play(
-    AssetSource('beep.mp3'),
+    AssetSource('beep.wav'),
     volume: volume,
   );
 
@@ -932,6 +1040,7 @@ await _player.play(
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(999),
                                   color: Colors.white.withValues(alpha: 0.06),
+								  
                                 ),
                                 child: Text(
                                   "Calibrating…",
@@ -1267,6 +1376,9 @@ class _EmptyStatePlayful extends StatelessWidget {
   }
 }
 
+
+
+
 class _DeviceCardPlayful extends StatelessWidget {
   final String title;
   final String id;
@@ -1279,7 +1391,9 @@ class _DeviceCardPlayful extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final Widget? details;
-
+  final bool isSaved;
+  final VoidCallback onToggleSaved;
+  
   const _DeviceCardPlayful({
     required this.title,
     required this.id,
@@ -1292,6 +1406,9 @@ class _DeviceCardPlayful extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     required this.details,
+	required this.isSaved,
+	required this.onToggleSaved,
+	
   });
 
   @override
@@ -1308,35 +1425,54 @@ class _DeviceCardPlayful extends StatelessWidget {
         curve: Curves.easeOut,
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white.withValues(alpha: 0.06),
-              Colors.white.withValues(alpha: 0.03),
-            ],
-          ),
-          boxShadow: const [
-            BoxShadow(color: Color(0x2A000000), blurRadius: 18, offset: Offset(0, 12)),
-          ],
-        ),
+  borderRadius: BorderRadius.circular(18),
+  color: Colors.white.withValues(alpha: stale ? 0.05 : 0.08),
+  border: Border(
+    left: BorderSide(
+      width: 3,
+      color: isSaved ? const Color(0xFFFFD166) : Colors.transparent,
+    ),
+  ),
+),
         child: Column(
           children: [
             Row(
               children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: accent.withValues(alpha: stale ? 0.14 : 0.22),
-                  ),
-                  child: Icon(
-                    Icons.bluetooth,
-                    color: Colors.white.withValues(alpha: stale ? 0.35 : 0.85),
-                    size: 20,
-                  ),
+                                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: accent.withValues(alpha: stale ? 0.14 : 0.22),
+                      ),
+                      child: Icon(
+                        Icons.bluetooth,
+                        color: Colors.white.withValues(alpha: stale ? 0.35 : 0.85),
+                        size: 20,
+                      ),
+                    ),
+                    if (isSaved)
+                      Positioned(
+                        right: -2,
+                        bottom: -2,
+                        child: Container(
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.white.withValues(alpha: 0.14),
+                          ),
+                          child: const Icon(
+                            Icons.star,
+                            size: 14,
+                            color: Color(0xFFFFD166),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1367,7 +1503,32 @@ class _DeviceCardPlayful extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
+                                const SizedBox(width: 10),
+
+                // Quick-save (bookmark) button: DOES NOT open details
+                InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: onToggleSaved,
+                  child: Container(
+                    width: 34,
+                    height: 34,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.white.withValues(alpha: 0.06),
+                    ),
+                    child: Icon(
+                      isSaved ? Icons.bookmark : Icons.bookmark_border,
+                      size: 18,
+                      color: isSaved
+                          ? const Color(0xFFFFD166)
+                          : Colors.white.withValues(alpha: stale ? 0.35 : 0.75),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(width: 8),
+
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -1428,19 +1589,25 @@ class _DeviceCardPlayful extends StatelessWidget {
   }
 }
 
+
+
 class _DeviceDetails extends StatelessWidget {
   final bool connectable;
   final int? txPower;
   final List<Guid> uuids;
   final List<int> manufacturerIds;
   final int lastSeenSeconds;
-
+  final bool isSaved;
+  final VoidCallback onToggleSaved;
+  
   const _DeviceDetails({
     required this.connectable,
     required this.txPower,
     required this.uuids,
     required this.manufacturerIds,
     required this.lastSeenSeconds,
+	required this.isSaved,
+    required this.onToggleSaved,
   });
 
   @override
@@ -1490,6 +1657,38 @@ class _DeviceDetails extends StatelessWidget {
           kv("Service UUIDs", uuids.isEmpty ? "—" : uuids.join(", ")),
           kv("Manufacturer", manufacturerIds.isEmpty ? "—" : manufacturerIds.join(", ")),
           kv("Last seen", "${lastSeenSeconds}s ago"),
+		            const SizedBox(height: 8),
+          InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: onToggleSaved,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                color: Colors.white.withValues(alpha: 0.06),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isSaved ? Icons.star : Icons.star_border,
+                    size: 18,
+                    color: isSaved ? const Color(0xFFFFD166) : Colors.white.withValues(alpha: 0.75),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      isSaved ? "Saved (tap to remove)" : "Save this device",
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontSize: 12.8,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 4),
           Text(
             "Tap: Find Mode • Long-press: pin & details",
