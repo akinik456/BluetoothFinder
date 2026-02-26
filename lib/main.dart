@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:io';
 import 'dart:convert';
-import 'package:flutter/services.dart';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -238,6 +237,8 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
       if (!isScanning) return;
       setState(() {});
     });
+	
+  unawaited(_loadSaved());	
   }
   Future<void> _loadSaved() async {
     final loaded = await SavedStore.load();
@@ -486,20 +487,25 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
       ),
     );
 
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final visibleIds = <String>{
+  ..._orderIds,
+  ..._saved.keys,
+}.toList();
+final now = DateTime.now().millisecondsSinceEpoch;
+final visibleResults = <String, ScanResult?>{};
+for (final id in visibleIds) {
+  final r = _latest[id];
 
-    final devices = <ScanResult>[];
-    for (final id in List<String>.from(_orderIds)) {
-      final r = _latest[id];
-      if (r == null) continue;
+  if (isScanning && _isDead(id, now) && !_saved.containsKey(id)) {
+    _dropDevice(id);
+    continue;
+  }
 
-      if (isScanning && _isDead(id, now)) {
-        _dropDevice(id);
-        continue;
-      }
-      devices.add(r);
-    }
-
+  // r null olabilir (scan görmedi), ama saved ise yine de listede kalacak
+  if (r != null || _saved.containsKey(id)) {
+    visibleResults[id] = r;
+  }
+}
     return Scaffold(
       body: Stack(
         children: [
@@ -549,7 +555,7 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
                   child: _HeaderPlayful(
                     isScanning: isScanning,
-                    deviceCount: devices.length,
+                    deviceCount: visibleResults.length,
                   ),
                 ),
 
@@ -570,11 +576,12 @@ Padding(
     children: [
       Text(
         "Tap for details",
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: Colors.white.withValues(alpha: 0.55),
-          letterSpacing: 0.2,
+        maxLines: 1,
+  overflow: TextOverflow.ellipsis,
+  style: const TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.2,
         ),
       ),
       const SizedBox(width: 8),
@@ -587,11 +594,12 @@ Padding(
       const SizedBox(width: 8),
       Text(
         "Hold to find",
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-          color: Colors.white.withValues(alpha: 0.55),
-          letterSpacing: 0.2,
+        maxLines: 1,
+  overflow: TextOverflow.ellipsis,
+  style: const TextStyle(
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.2,
         ),
       ),
     ],
@@ -601,27 +609,36 @@ Padding(
 const SizedBox(height: 6),
                 // Device list
                 Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: devices.isEmpty
-                        ? _EmptyStatePlayful(isScanning: isScanning)
-                        : ListView.builder(
-                            padding: const EdgeInsets.only(top: 6, bottom: 10),
-                            itemCount: devices.length,
-                            itemBuilder: (context, i) {
-                              final r = devices[i];
-                              final id = r.device.remoteId.str;
-							  final saved = _saved.containsKey(id);
-								
-                              final name = (r.device.platformName).trim();
+  child: Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+    child: visibleResults.isEmpty
+        ? _EmptyStatePlayful(isScanning: isScanning)
+        : ListView.builder(
+            padding: const EdgeInsets.only(top: 6, bottom: 10),
+            itemCount: visibleResults.length,
+            itemBuilder: (context, i) {
+              final id = visibleResults.keys.elementAt(i);
+              final r = visibleResults[id];
+
+              final saved = _saved[id];
+              final isSaved = saved != null;
+
+              // buradan aşağıya mevcut kart kodun devam edecek
+ 							  
+                              final name = (r?.device.platformName.trim().isNotEmpty ?? false)
+        ? r!.device.platformName.trim()
+        : (saved?.name?.trim().isNotEmpty ?? false)
+            ? saved!.name!.trim()
+            : 'Saved device';
+							  
                               final title = name.isEmpty ? "Unknown" : name;
 
-                              final adv = r.advertisementData;
+                              final adv = r?.advertisementData;
                               final isOpen = (_expandedId == id);
                               final stale = _isStale(id, now);
 
                               final smooth = _rssiEma[id];
-                              final smoothRssi = (smooth == null) ? r.rssi : smooth.round();
+                              final smoothRssi = (smooth == null) ? (r?.rssi ?? -999) : smooth.round();
 
                               final accent = stale
                                   ? Colors.white.withValues(alpha: 0.12)
@@ -635,7 +652,7 @@ const SizedBox(height: 6),
                               return Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 7),
                                 child: _DeviceCardPlayful(
-								  isSaved: saved,
+								  isSaved: isSaved,
 								  onToggleSaved: () => _toggleSaved(id: id, name: title),
                                   title: title,
                                   id: id,
@@ -646,15 +663,18 @@ const SizedBox(height: 6),
                                   barFill: barFill,
                                   isOpen: isOpen,
 								  onTap: () => _toggleDetails(id),
-                                  onLongPress: () => _enterFindMode(r),
+                                  onLongPress: () {
+  if (r == null) return;
+  _enterFindMode(r);
+},
                                   details: isOpen
                                       ? _DeviceDetails(
-                                          connectable: adv.connectable,
-                                          txPower: adv.txPowerLevel,
-                                          uuids: adv.serviceUuids,
-                                          manufacturerIds: adv.manufacturerData.keys.toList(),
+                                          connectable: adv?.connectable ?? false,
+                                          txPower: adv?.txPowerLevel,
+                                          uuids: adv?.serviceUuids ?? const [],
+                                          manufacturerIds: (adv?.manufacturerData.keys.toList()) ?? const [],
                                           lastSeenSeconds: ((now - (_lastSeenMs[id] ?? now)) ~/ 1000),
-                                          isSaved: saved,
+                                          isSaved: isSaved,
 										  onToggleSaved: () => _toggleSaved(id: id, name: title),
 										)
                                       : null,
@@ -664,6 +684,7 @@ const SizedBox(height: 6),
                           ),
                   ),
                 ),
+				
               ],
             ),
           ),
@@ -1398,9 +1419,19 @@ class _EmptyStatePlayful extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
-        color: Colors.white.withValues(alpha: 0.04),
-      ),
+  borderRadius: BorderRadius.circular(22),
+  color: Colors.white.withValues(alpha: 0.04),
+  border: Border.all(
+    color: Colors.white.withValues(alpha: 0.06),
+  ),
+  boxShadow: [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.25),
+      blurRadius: 18,
+      offset: const Offset(0, 6),
+    ),
+  ],
+),
       child: Center(
         child: Text(
           text,
@@ -1453,17 +1484,19 @@ class _DeviceCardPlayful extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // bar width adapted to screen
-    final barWidth = MediaQuery.of(context).size.width - 32 - 28;
+	final barWidth = math.max(0.0, MediaQuery.of(context).size.width - 32 - 28);
+   
+   final r = BorderRadius.circular(22);
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(22),
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
+return _PressableScale(
+  borderRadius: r,
+  onTap: onTap,
+  onLongPress: onLongPress,
+  child: AnimatedContainer(
+  duration: const Duration(milliseconds: 180),
+  curve: Curves.easeOut,
+  padding: const EdgeInsets.all(14),
+  decoration: BoxDecoration(
   borderRadius: BorderRadius.circular(18),
   color: Colors.white.withValues(alpha: stale ? 0.05 : 0.08),
   border: Border(
@@ -1477,7 +1510,7 @@ class _DeviceCardPlayful extends StatelessWidget {
           children: [
             Row(
               children: [
-                                Stack(
+                  Stack(
                   clipBehavior: Clip.none,
                   children: [
                     Container(
@@ -1486,6 +1519,13 @@ class _DeviceCardPlayful extends StatelessWidget {
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: accent.withValues(alpha: stale ? 0.14 : 0.22),
+						boxShadow: [
+  BoxShadow(
+    color: accent.withValues(alpha: stale ? 0.10 : 0.22),
+    blurRadius: stale ? 10 : 16,
+    spreadRadius: stale ? 0 : 1,
+  ),
+],
                       ),
                       child: Icon(
                         Icons.bluetooth,
@@ -1531,34 +1571,31 @@ class _DeviceCardPlayful extends StatelessWidget {
                       const SizedBox(height: 3),
                       Text(
                         id,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.45),
-                          fontSize: 12.2,
-                          fontWeight: FontWeight.w700,
+  maxLines: 1,
+  overflow: TextOverflow.ellipsis,
+  style: TextStyle(
+    fontSize: 11,
+    letterSpacing: 0.4,
+    color: Colors.white.withValues(alpha: 0.45),
                         ),
                       ),
                     ],
                   ),
                 ),
-                                const SizedBox(width: 10),
+                const SizedBox(width: 10),
 
                 // Quick-save (bookmark) button: DOES NOT open details
-                InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: onToggleSaved,
-                  child: Container(
-                    width: 34,
-                    height: 34,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      color: Colors.white.withValues(alpha: 0.06),
-                    ),
-                    child: Icon(
+				  SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: IconButton(
+                    onPressed: onToggleSaved,
+                    tooltip: isSaved ? 'Saved' : 'Save',
+                    padding: EdgeInsets.zero,
+                    splashRadius: 22,
+                    icon: Icon(
                       isSaved ? Icons.bookmark : Icons.bookmark_border,
-                      size: 18,
+                      size: 20,
                       color: isSaved
                           ? const Color(0xFFFFD166)
                           : Colors.white.withValues(alpha: stale ? 0.35 : 0.75),
@@ -1566,11 +1603,12 @@ class _DeviceCardPlayful extends StatelessWidget {
                   ),
                 ),
 
+                const SizedBox(width: 6),
                 SizedBox(
-  width: 70,
-  child: Column(
-    crossAxisAlignment: CrossAxisAlignment.center,
-    children: [
+                  width: 70,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
                     Text(
                       rssi == null ? "—" : "$rssi",
                       style: TextStyle(
@@ -1605,10 +1643,15 @@ class _DeviceCardPlayful extends StatelessWidget {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 140),
-                    width: barWidth * barFill.clamp(0.0, 1.0),
-                    color: accent.withValues(alpha: stale ? 0.18 : 0.95),
-                  ),
+  duration: const Duration(milliseconds: 220),
+  curve: Curves.easeOutCubic,
+  width: barWidth * barFill,
+  height: 8,
+  decoration: BoxDecoration(
+    borderRadius: BorderRadius.circular(999),
+    color: accent.withValues(alpha: stale ? 0.25 : 0.85),
+  ),
+),
                 ),
               ),
             ),
@@ -1624,7 +1667,8 @@ class _DeviceCardPlayful extends StatelessWidget {
             ),
           ],
         ),
-      ),
+      
+	  ),
     );
   }
 }
@@ -1697,7 +1741,7 @@ class _DeviceDetails extends StatelessWidget {
           kv("Service UUIDs", uuids.isEmpty ? "—" : uuids.join(", ")),
           kv("Manufacturer", manufacturerIds.isEmpty ? "—" : manufacturerIds.join(", ")),
           kv("Last seen", "${lastSeenSeconds}s ago"),
-		            const SizedBox(height: 8),
+		  const SizedBox(height: 8),
           InkWell(
             borderRadius: BorderRadius.circular(14),
             onTap: onToggleSaved,
@@ -1790,6 +1834,62 @@ class _IconPill extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.06),
         ),
         child: Icon(icon, color: Colors.white, size: 20),
+      ),
+    );
+  }
+}
+
+class _PressableScale extends StatefulWidget {
+  final Widget child;
+  final BorderRadius borderRadius;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  const _PressableScale({
+    required this.child,
+    required this.borderRadius,
+    this.onTap,
+	this.onLongPress,
+  });
+
+  @override
+  State<_PressableScale> createState() => _PressableScaleState();
+}
+
+class _PressableScaleState extends State<_PressableScale> {
+  bool _pressed = false;
+
+  void _setPressed(bool v) {
+    if (_pressed == v) return;
+    setState(() => _pressed = v);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      scale: _pressed ? 0.985 : 1.0,
+      duration: const Duration(milliseconds: 110),
+      curve: Curves.easeOutCubic,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: widget.borderRadius,
+          onTap: widget.onTap,
+		  onLongPress: widget.onLongPress,
+          onTapDown: (_) => _setPressed(true),
+          onTapCancel: () => _setPressed(false),
+          onTapUp: (_) => _setPressed(false),
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return Colors.white.withValues(alpha: 0.06);
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return Colors.white.withValues(alpha: 0.03);
+            }
+            return null;
+          }),
+          child: widget.child,
+        ),
       ),
     );
   }
