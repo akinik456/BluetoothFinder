@@ -161,10 +161,13 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
   
   Map<String, SavedDevice> _saved = {};  
 
-  @override
+    final Set<String> _seenThisSession = <String>{};
+
+@override
   void initState() {
     super.initState();
 	WidgetsBinding.instance.addObserver(this);
+    _seenThisSession.clear();
     _sweepCtrl =
         AnimationController(vsync: this, duration: const Duration(milliseconds: 2000));
     _pulseCtrl =
@@ -189,6 +192,8 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
       for (final r in results) {
         final id = r.device.remoteId.str;
 
+
+        _seenThisSession.add(id);
         _latest[id] = r;
         _lastSeenMs[id] = now;
 
@@ -328,7 +333,91 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     return "VERY FAR";
   }
 
-  // -------- permissions + scanning --------
+  
+
+void _toggleExpanded(String id) {
+  setState(() {
+    _expandedId = (_expandedId == id) ? null : id;
+  });
+}
+
+Widget _buildDeviceCard(String id, ScanResult? r, int now) {
+  final saved = _saved[id];
+  final isSaved = saved != null;
+
+  final seenThisSession = _seenThisSession.contains(id);
+
+  final hasEverBeenSeen = _lastSeenMs.containsKey(id);
+  final stale = hasEverBeenSeen ? _isDead(id, now) : false;
+
+  final smooth = _rssiEma[id];
+  final smoothRssi = (smooth == null) ? r?.rssi : smooth.round();
+
+  final String title = (() {
+    final n = r?.device.platformName.trim();
+    if (n != null && n.isNotEmpty) return n;
+    final sn = saved?.name?.trim();
+    if (sn != null && sn.isNotEmpty) return sn;
+    return "Unknown";
+  })();
+
+  final Color accent = (smoothRssi == null)
+      ? Colors.white.withValues(alpha: 0.35)
+      : _rssiColor(smoothRssi);
+
+  final String distanceLabel = isSaved && !seenThisSession
+      ? "NOT SEEN THIS SESSION"
+      : (stale
+          ? "OUT OF RANGE"
+          : (smoothRssi == null ? "—" : _rssiToDistanceLabel(smoothRssi)));
+
+  final double barFill = (smoothRssi == null) ? 0.0 : _rssiToFill(smoothRssi);
+
+  final int? lastSeenMs = _lastSeenMs[id];
+  var lastSeenSeconds =
+      (lastSeenMs == null) ? 9999 : ((now - lastSeenMs) / 1000).round();
+  if (lastSeenSeconds < 0) lastSeenSeconds = 0;
+
+  final adv = r?.advertisementData;
+
+  final details = (_expandedId == id)
+      ? _DeviceDetails(
+          connectable: adv?.connectable ?? false,
+          txPower: adv?.txPowerLevel,
+          uuids: adv?.serviceUuids ?? const [],
+          manufacturerIds: adv?.manufacturerData.keys.toList() ?? const [],
+          lastSeenSeconds: lastSeenSeconds,
+          isSaved: isSaved,
+          onToggleSaved: () => _toggleSaved(id: id, name: title),
+        )
+      : null;
+
+  return _DeviceCardPlayful(
+    title: title,
+    id: id,
+    accent: accent,
+    stale: stale,
+    rssi: smoothRssi,
+    distanceLabel: distanceLabel,
+    barFill: barFill,
+    isOpen: _expandedId == id,
+    onTap: () => _toggleExpanded(id),
+    onLongPress: () {
+      if (r == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("NOT SEEN THIS SESSION")),
+        );
+        return;
+      }
+      _enterFindMode(r);
+    },
+    details: details,
+    isSaved: isSaved,
+    onToggleSaved: () => _toggleSaved(id: id, name: title),
+  );
+}
+
+// -------- permissions + scanning --------
 
   Future<void> _ensurePermissions() async {
     final scan = await Permission.bluetoothScan.request();
@@ -506,6 +595,27 @@ for (final id in visibleIds) {
     visibleResults[id] = r;
   }
 }
+
+	final sortedIds = visibleResults.keys.toList()
+	 ..sort((a, b) {
+		final aSaved = _saved.containsKey(a);
+		final bSaved = _saved.containsKey(b);
+
+		// 1️⃣ Saved üstte
+		if (aSaved != bSaved) {
+		return aSaved ? -1 : 1;
+		}
+
+		// 2️⃣ RSSI varsa güçlü olan üste
+		final aRssi = visibleResults[a]?.rssi ?? -999;
+		final bRssi = visibleResults[b]?.rssi ?? -999;
+
+		return bRssi.compareTo(aRssi);
+	});
+	
+	final savedIds = sortedIds.where((id) => _saved.containsKey(id)).toList();
+	final nearbyIds = sortedIds.where((id) => !_saved.containsKey(id)).toList();	
+	
     return Scaffold(
       body: Stack(
         children: [
@@ -606,89 +716,57 @@ Padding(
   ),
 ),
 
-const SizedBox(height: 6),
-                // Device list
-                Expanded(
+
+	
+  const SizedBox(height: 6),
+// Device list
+Expanded(
   child: Padding(
     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
     child: visibleResults.isEmpty
         ? _EmptyStatePlayful(isScanning: isScanning)
-        : ListView.builder(
+        : ListView(
             padding: const EdgeInsets.only(top: 6, bottom: 10),
-            itemCount: visibleResults.length,
-            itemBuilder: (context, i) {
-              final id = visibleResults.keys.elementAt(i);
-              final r = visibleResults[id];
-
-              final saved = _saved[id];
-              final isSaved = saved != null;
-
-              // buradan aşağıya mevcut kart kodun devam edecek
- 							  
-                              final name = (r?.device.platformName.trim().isNotEmpty ?? false)
-        ? r!.device.platformName.trim()
-        : (saved?.name?.trim().isNotEmpty ?? false)
-            ? saved!.name!.trim()
-            : 'Saved device';
-							  
-                              final title = name.isEmpty ? "Unknown" : name;
-
-                              final adv = r?.advertisementData;
-                              final isOpen = (_expandedId == id);
-                              final stale = _isStale(id, now);
-
-                              final smooth = _rssiEma[id];
-                              final smoothRssi = (smooth == null) ? (r?.rssi ?? -999) : smooth.round();
-
-                              final accent = stale
-                                  ? Colors.white.withValues(alpha: 0.12)
-                                  : _rssiColor(smoothRssi);
-
-                              final barFill = stale ? 0.0 : _rssiToFill(smoothRssi);
-                              final label = stale ? "OUT OF RANGE" : _rssiToDistanceLabel(smoothRssi);
-                              final displayRssi = stale ? null : smoothRssi;
-							  //final saved = _isSaved(id);
-
-                              return Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 7),
-                                child: _DeviceCardPlayful(
-								  isSaved: isSaved,
-								  onToggleSaved: () => _toggleSaved(id: id, name: title),
-                                  title: title,
-                                  id: id,
-                                  accent: accent,
-                                  stale: stale,
-                                  rssi: displayRssi,
-                                  distanceLabel: label,
-                                  barFill: barFill,
-                                  isOpen: isOpen,
-								  onTap: () => _toggleDetails(id),
-                                  onLongPress: () {
-  if (r == null) return;
-  _enterFindMode(r);
-},
-                                  details: isOpen
-                                      ? _DeviceDetails(
-                                          connectable: adv?.connectable ?? false,
-                                          txPower: adv?.txPowerLevel,
-                                          uuids: adv?.serviceUuids ?? const [],
-                                          manufacturerIds: (adv?.manufacturerData.keys.toList()) ?? const [],
-                                          lastSeenSeconds: ((now - (_lastSeenMs[id] ?? now)) ~/ 1000),
-                                          isSaved: isSaved,
-										  onToggleSaved: () => _toggleSaved(id: id, name: title),
-										)
-                                      : null,
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ),
-				
+            children: [
+              if (savedIds.isNotEmpty) ...[
+                const _SectionHeader(title: "SAVED"),
+                for (final id in savedIds)
+                  _buildDeviceCard(id, visibleResults[id], now),
+              ],
+              if (nearbyIds.isNotEmpty) ...[
+                const _SectionHeader(title: "NEARBY"),
+                for (final id in nearbyIds)
+                  _buildDeviceCard(id, visibleResults[id], now),
+              ],
+            ],
+          ),
+  ),
+),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 12,
+          letterSpacing: 1.2,
+          fontWeight: FontWeight.w600,
+          color: Colors.white70,
+        ),
       ),
     );
   }
