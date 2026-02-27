@@ -162,6 +162,11 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
   Map<String, SavedDevice> _saved = {};  
 
     final Set<String> _seenThisSession = <String>{};
+	
+	Timer? _watchdog;
+	int _lastPacketMs = 0; // en son scanResults callback geldiği an
+	bool _restartBusy = false;
+	bool _scanToggleBusy = false;
 
 @override
   void initState() {
@@ -187,8 +192,9 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
     });
 
     _scanSub = FlutterBluePlus.scanResults.listen((results) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-
+		final now=DateTime.now().millisecondsSinceEpoch;
+      _lastPacketMs = now;
+	  
       for (final r in results) {
         final id = r.device.remoteId.str;
 
@@ -291,6 +297,7 @@ Future<void> _stopEverythingFromLifecycle() async {
   // Tarama gerçekten dursun
   try {
     await FlutterBluePlus.stopScan();
+	debugPrint("stop called2");
   } catch (_) {}
 }
 
@@ -430,8 +437,12 @@ Widget _buildDeviceCard(String id, ScanResult? r, int now) {
       throw Exception("Bluetooth permission denied");
     }
   }
+  
+  bool _scanWanted = false;
 
   Future<void> _startScan() async {
+  debugPrint("WDT: started");
+  _scanWanted = true;
   BeepGuard.arm();
     await _ensurePermissions();
 
@@ -468,37 +479,100 @@ Widget _buildDeviceCard(String id, ScanResult? r, int now) {
     _rssiEma.clear();
     _orderIds.clear();
     _expandedId = null;
-
+	try{
     await FlutterBluePlus.startScan(
       continuousUpdates: true,
       continuousDivisor: 1,
       androidScanMode: AndroidScanMode.lowLatency,
     );
+	}catch(e){
+	debugPrint("startscan error:$e");
+	return;
+	}
+	
+	// WATCHDOG START
+_watchdog?.cancel();
+    _watchdog = Timer.periodic(const Duration(seconds: 5), (_) {
+      debugPrint("WDT: tick");
+      if (!_scanWanted) return;
+
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      if (_lastPacketMs == 0 || (now - _lastPacketMs) > 12000) {
+        _lastPacketMs = now; // cooldown to avoid spam
+        _restartScanSoft("watchdog_no_packets");
+      }
+    });
+
   }
 
   Future<void> _stopScan() async {
+  debugPrint("stop called");
+  _scanWanted = false;
   BeepGuard.killNow();
     await FlutterBluePlus.stopScan();
+  _watchdog?.cancel();
+  _watchdog = null;	
   }
 
   Future<void> _toggleScan() async {
-    try {
-      if (!isScanning) {
-        await _startScan();
-      } else {
-        await _stopScan();
-      }
-    } catch (e) {
-      if (!mounted) return;
-      // In case plugin state didn't update yet, force UI to idle.
-      setState(() => isScanning = false);
-      if (_sweepCtrl.isAnimating) _sweepCtrl.stop();
-      if (_pulseCtrl.isAnimating) _pulseCtrl.stop();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("$e")));
+  if (_scanToggleBusy) return;
+  _scanToggleBusy = true;
+  try {
+    if (!isScanning) {
+      await _startScan();
+    } else {
+      await _stopScan();
+      debugPrint("stop called3");
     }
+  } catch (e) {
+    if (!mounted) return;
+    // In case plugin state didn't update yet, force UI to idle.
+    setState(() => isScanning = false);
+    if (_sweepCtrl.isAnimating) _sweepCtrl.stop();
+    if (_pulseCtrl.isAnimating) _pulseCtrl.stop();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("$e")));
+  } finally {
+    _scanToggleBusy = false;
   }
+}
 
-  void _enterFindMode(ScanResult r) {
+Future<void> _restartScanSoft(String reason) async {
+	debugPrint("WATCHDOG HIT : $reason");
+  if (_restartBusy) return;
+  _restartBusy = true;
+  try {
+  // Kullanıcı stop’a bastıysa geri açma
+  if (!_scanWanted) return;
+
+  // Log istersen:
+  // debugPrint("scan restart: $reason");
+
+  try {
+    await FlutterBluePlus.stopScan();
+	debugPrint("stop called4");
+  } catch (e) {debugPrint("startScan error: $e");}
+
+  await Future.delayed(const Duration(milliseconds: 800));
+
+  
+  if(!_scanWanted) return;
+
+  // ⚠️ BURAYA mevcut _startScan içinde kullandığın startScan çağrısını birebir yapıştıracağız.
+  // Şimdilik en basit hali:
+  try {
+    await FlutterBluePlus.startScan(continuousUpdates: true,
+  continuousDivisor: 1,
+  androidScanMode: AndroidScanMode.lowLatency,);
+	debugPrint("start called");
+    _lastPacketMs = DateTime.now().millisecondsSinceEpoch;
+  } catch (e) {debugPrint("startScan error: $e");}
+  } finally {
+    _restartBusy = false;
+  }
+}
+
+void _enterFindMode(ScanResult r) {
     if (!isScanning) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Start Scan first")));
       return;
@@ -568,6 +642,7 @@ Widget _buildDeviceCard(String id, ScanResult? r, int now) {
 
   @override
   Widget build(BuildContext context) {
+	final now=DateTime.now().millisecondsSinceEpoch;
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
@@ -580,7 +655,6 @@ Widget _buildDeviceCard(String id, ScanResult? r, int now) {
   ..._orderIds,
   ..._saved.keys,
 }.toList();
-final now = DateTime.now().millisecondsSinceEpoch;
 final visibleResults = <String, ScanResult?>{};
 for (final id in visibleIds) {
   final r = _latest[id];
@@ -825,8 +899,7 @@ bool _beepEnabled = true;
   void initState() {
     super.initState();
 WidgetsBinding.instance.addObserver(this);
-    final now = DateTime.now().millisecondsSinceEpoch;
-
+	final now=DateTime.now().millisecondsSinceEpoch;
     // Restore best-so-far calibration if present
     final cached = calibratedMaxById[widget.deviceId];
     if (cached != null) {
@@ -870,7 +943,7 @@ try { await _player.seek(Duration.zero); } catch (_) {}
 
   // 4) BLE scan'i durdur (Home zaten durduruyor ama garanti olsun)
   try { await FlutterBluePlus.stopScan(); } catch (_) {}
-
+debugPrint("stop called5");
   // 5) UI/State'i sessize al (stale/son beep kalmasın)
   _ema = null;
   _rssi = null;
@@ -894,8 +967,8 @@ BeepGuard.killNow();
 }
 
     _sub = FlutterBluePlus.scanResults.listen((results) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-
+	final now=DateTime.now().millisecondsSinceEpoch;
+		_lastPacketMs=now;
       for (final r in results) {
         if (r.device.remoteId.str != widget.deviceId) continue;
 
@@ -937,9 +1010,8 @@ BeepGuard.killNow();
 	
 	
     _tick = Timer.periodic(const Duration(milliseconds: 60), (_) async {
+	final now=DateTime.now().millisecondsSinceEpoch;
       if (!mounted) return;
-
-      final now = DateTime.now().millisecondsSinceEpoch;
       final hasSeen = _lastSeenMs != 0;
       final ageMs = hasSeen ? (now - _lastSeenMs) : 999999;
       final stale = ageMs > staleAfterMs;
@@ -1057,13 +1129,13 @@ await _player.play(
   @override
   Widget build(BuildContext context) {
     SystemChrome.setSystemUIOverlayStyle(
+	final now=DateTime.now().millisecondsSinceEpoch;
       const SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
         statusBarIconBrightness: Brightness.light,
         statusBarBrightness: Brightness.dark,
       ),
     );
-    final now = DateTime.now().millisecondsSinceEpoch;
     final hasSeen = _lastSeenMs != 0;
     final ageMs = hasSeen ? (now - _lastSeenMs) : 999999;
     final stale = ageMs > staleAfterMs;
