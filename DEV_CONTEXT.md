@@ -1,48 +1,49 @@
 # BluetoothFinder – DEV CONTEXT
 
-## Base
-- Branch: feature/playful-ui-log-beep
-- Base version: audio-stable (main_audio_fixed2 lineage)
-- Beep system is STABLE and must NOT break.
+## Current Branch
+feature/playful-ui-stable
 
-## Core Identity
-- App name: Find Lost Gadget
-- Playful UI style
-- Dark theme (Material3)
-- Finder identity preserved
-- No unnecessary rewrites
+## Base Commit
+59efb67
+Saved/Nearby sections + session-aware labels + UI stabilization
 
-## Current Architecture
+## Status
+✅ Stable baseline restored
+✅ No Watchdog / Freeze Guard present
+✅ Beep system stable
+✅ Scan lifecycle stable
+✅ Saved devices persistent
+✅ Saved / Nearby sections active
+✅ Session-aware labels working
 
-### Device Card
-- StatelessWidget: _DeviceCardPlayful
-- Left accent border when saved
-- Bookmark quick-toggle button
-- RSSI + distanceLabel fixed width panel
-- Playful proximity bar (AnimatedContainer)
-- Tap → Details
-- Long press → Find mode
+## IMPORTANT RULES
+- DO NOT introduce Watchdog yet
+- Freeze Guard will be added ONLY after clean validation phase
+- FindModePage and HomePage scan logic must remain isolated
+- Beep stability has absolute priority
+- No large refactors without commit checkpoint
 
-### Save System
-- Persistent using SharedPreferences
-- SavedDevice model
-- SavedStore load/save
-- Saved devices pinned first in list
-- Bookmark icon toggles save state
+## Scan Architecture (Current)
+HomePage:
+- Controls main BLE scan
+- Saved device tracking
+- DeviceCard rendering
+- EMA RSSI smoothing
 
-### UX Rules
-- Compile-safe after each step
-- No large rewrites
-- Minimal layout instability
-- Beep must remain untouched
+FindModePage:
+- Independent proximity tracking
+- Calibration window
+- Beep triggering
+- NO watchdog logic
 
-## Next Potential Improvements
-- Saved devices persist even when out-of-range
-- Subtle typography polish
-- RSSI monospace option
-- First-run gesture hint fade
+## Next Phase
+Phase: Stabilization & Test Preparation
 
-## DO NOT TOUCH
-- FindModePage audio logic
-- Beep timing logic
-- Scan lifecycle stability
+Goals:
+1. Validate long-running scan stability
+2. Confirm lifecycle behavior (home/background/lock)
+3. Memory & callback consistency check
+4. Prepare controlled Scan Freeze Guard integration
+
+## Development Principle
+Small step → Compile → Test → Commit
