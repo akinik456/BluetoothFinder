@@ -137,7 +137,7 @@ class _HomePageState extends State<HomePage>
 double _minRssi = -100;     // zayıf sinyal tabanı
 double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
   bool isScanning = false;
-
+  
   late final AnimationController _sweepCtrl;
   late final AnimationController _pulseCtrl;
 
@@ -161,7 +161,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
   
   Map<String, SavedDevice> _saved = {};  
 
-    final Set<String> _seenThisSession = <String>{};
+  final Set<String> _seenThisSession = <String>{};
 
 @override
   void initState() {
@@ -282,6 +282,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
     _orderIds.remove(id);
     if (_expandedId == id) _expandedId = null;
   }
+  
 Future<void> _stopEverythingFromLifecycle() async {
   // UI'ı anında OFF yap
   if (mounted && isScanning) {
@@ -434,6 +435,7 @@ Widget _buildDeviceCard(String id, ScanResult? r, int now) {
   Future<void> _startScan() async {
   BeepGuard.arm();
     await _ensurePermissions();
+	if (!mounted) return;
 
     // Ensure Bluetooth is ON (Android can prompt via system dialog)
     if (Platform.isAndroid) {
@@ -482,21 +484,25 @@ Widget _buildDeviceCard(String id, ScanResult? r, int now) {
   }
 
   Future<void> _toggleScan() async {
-    try {
-      if (!isScanning) {
-        await _startScan();
-      } else {
-        await _stopScan();
-      }
-    } catch (e) {
+  try {
+    if (!isScanning) {
+
       if (!mounted) return;
-      // In case plugin state didn't update yet, force UI to idle.
-      setState(() => isScanning = false);
-      if (_sweepCtrl.isAnimating) _sweepCtrl.stop();
-      if (_pulseCtrl.isAnimating) _pulseCtrl.stop();
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("$e")));
+      
+      await _startScan();
+
+    } else {
+      await _stopScan();
     }
+  } catch (e) {
+    if (!mounted) return;
+    setState(() => isScanning = false);
+    if (_sweepCtrl.isAnimating) _sweepCtrl.stop();
+    if (_pulseCtrl.isAnimating) _pulseCtrl.stop();
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text("$e")));
   }
+}
 
   void _enterFindMode(ScanResult r) {
     if (!isScanning) {
@@ -717,6 +723,8 @@ Padding(
 ),
 
 
+
+
 	
   const SizedBox(height: 6),
 // Device list
@@ -807,7 +815,7 @@ class _FindModePageState extends State<FindModePage>
   bool _audioReady = false;
 
   static const int staleAfterMs = 3500;
-
+  
   // ===== Auto-calibration =====
   static const int _minRssi = -85; // left side label (far reference)
   final int _calWindowMs = 2000; // 2s calibration window
@@ -820,6 +828,7 @@ class _FindModePageState extends State<FindModePage>
 
 int _beepGen = 0; // kill-switch jenerasyonu
 bool _beepEnabled = true;
+
 
   @override
   void initState() {
@@ -894,19 +903,23 @@ BeepGuard.killNow();
 }
 
     _sub = FlutterBluePlus.scanResults.listen((results) {
-      final now = DateTime.now().millisecondsSinceEpoch;
+  final now = DateTime.now().millisecondsSinceEpoch;
+  
+  for (final r in results) {
+  print("SCAN -> ${r.device.remoteId.str} | target=${widget.deviceId}");
+    final id = r.device.remoteId.str;
+    if (id != widget.deviceId) continue;
 
-      for (final r in results) {
-        if (r.device.remoteId.str != widget.deviceId) continue;
+    // EMA smoothing
+    const double alpha = 0.25;
+    final raw = r.rssi.toDouble();
+    _ema = (_ema == null) ? raw : (alpha * raw) + ((1 - alpha) * _ema!);
 
-        // EMA smoothing
-        const double alpha = 0.25;
-        final raw = r.rssi.toDouble();
-        _ema = (_ema == null) ? raw : (alpha * raw) + ((1 - alpha) * _ema!);
+    _rssi = _ema!.round();
+    _lastSeenMs = now;
 
-        _rssi = _ema!.round();
-        _lastSeenMs = now;
-
+    // Session info (UI heartbeat)
+              
         // --- Auto calibration update (best-so-far) ---
         if (_rssi != null) {
           if (_calibrating) {
@@ -1187,6 +1200,7 @@ await _player.play(
                                   ),
                                 ),
                               ),
+						  
                           ],
                         ),
                         const SizedBox(height: 12),
@@ -1277,6 +1291,7 @@ await _player.play(
                     },
                   ),
                   const SizedBox(height: 8),
+				  
                 ],
               ),
             ),
