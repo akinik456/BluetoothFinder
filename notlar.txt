@@ -127,7 +127,43 @@ DEV_CONTEXT.md is active.
 Compile-safe, no large rewrites.
 Let’s continue carefully.
 *********************************
+1. EMA (Exponential Moving Average) Uygulaman
+alpha = 0.25 değerini seçmişsin. Bu değer, sinyaldeki ani zıplamaları (jitter) engellemek için oldukça dengeli.
 
+İpucu: Eğer cihazı ararken mesafe barının hala çok "titrediğini" hissedersen alpha değerini 0.15 civarına çekebilirsin. Bu, tepki süresini bir miktar geciktirir ama daha "yağ gibi akan" bir arayüz sağlar.
+
+2. Kalibrasyon ve Mesafe Algoritması
+Dinamik kalibrasyon yapman (_calMaxRssi) çok zekice. Cihazdan cihaza Bluetooth gücü değiştiği için sabit bir -45 dBm her zaman "Very Close" demek olmayabiliyor. Sen bunu çalışma anında peak değerine göre güncelliyorsun.
+
+Kritik Nokta: Logaritmik ilerleme (_rssiToLogProgress) sayesinde cihaz yaklaştıkça beep seslerinin hızlanması (_progressToIntervalMs) tam bir metal dedektörü hissi verecektir. Kullanıcı deneyimi (UX) açısından bu en güçlü noktan.
+
+3. Play Store İzinleri ve Politika (En Önemli Kısım)
+Kodunda permission_handler ile şu izinleri istiyorsun:
+
+Permission.bluetoothScan
+
+Permission.bluetoothConnect
+
+Permission.locationWhenInUse
+
+Play Store Reddi Almamak İçin:
+Google, Bluetooth taraması için neden Konum izni istediğini çok sert sorguluyor.
+
+Çözüm: Uygulama açıldığında veya izin istemeden hemen önce bir "Açıklama Diyaloğu" (Pre-permission dialog) göster. "Cihazları bulabilmemiz için Android kuralları gereği konum izni gereklidir, konumunuzu takip etmiyoruz" gibi bir açıklama ekle.
+
+4. Lifecycle Yönetimi
+didChangeAppLifecycleState içinde inactive veya paused durumunda taramayı ve sesi durdurman (_hardStopFindMode) harika. Bu hem batarya dostu bir hareket hem de uygulamanın arka planda yanlışlıkla beep sesi çıkarmasını engelliyor. Play Store bu tarz kaynak yönetimi detaylarına puan verir.
+
+5. Küçük Bir Hata/Eksiklik Uyarısı
+Kodda beep.wav dosyasını AssetSource üzerinden çağırıyorsun.
+
+pubspec.yaml dosyanda bu ses dosyasının tanımlı olduğundan ve assets/ klasöründe bulunduğundan emin ol. Aksi takdirde uygulama store sürümünde (release) sessiz kalabilir.
+
+Sonuç: Kodun mimarisi "Find Mode" ve "Home" arasında BeepGuard ve globalMute ile çok iyi senkronize edilmiş.
+
+Emmioğlu, bu proje şu haliyle PS için gayet hazır duruyor. Tek yapman gereken pubspec.lock ve generated dosyalarındaki o çakışmaları çözdüğümüz gibi temiz bir main dalı üzerinden "release build" almak.
+
+Lynracare'e geçmeden önce bu projeyle Play Console'un tozunu yutman sana çok şey katacak. Başka bir takıldığın yer olursa hemen bakalım!
 
 
 *********************************

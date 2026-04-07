@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.findbles_clean"
+    namespace = "com.akinik.findlostgadget"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -20,15 +20,16 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.findbles_clean"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
-    }
+		// Kendi benzersiz ID'ni buraya yaz (Örn: com.akinik.findlostgadget)
+		// Play Store'a çıktıktan sonra bu DEĞİŞTİRİLEMEZ.
+		applicationId = "com.akinik.findlostgadget" 
+
+		minSdk = 28          // Android 9.0 (Pie) desteği için sabitledik
+		targetSdk = 34       // Google Play Store'un 2024 sonu itibariyle istediği güncel sürüm
+		
+		versionCode = flutter.versionCode
+		versionName = flutter.versionName
+	}
 
     buildTypes {
         release {

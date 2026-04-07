@@ -244,6 +244,11 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
     });
 	
   unawaited(_loadSaved());	
+  
+  // Play Store kuralı: Açılışta bilgilendirip izin iste
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _requestPermissions();
+    });
   }
   Future<void> _loadSaved() async {
     final loaded = await SavedStore.load();
@@ -431,6 +436,52 @@ Widget _buildDeviceCard(String id, ScanResult? r, int now) {
       throw Exception("Bluetooth permission denied");
     }
   }
+  
+Future<void> _requestPermissions() async {
+    // 1. Önce kullanıcıya "Neden" istediğimizi açıklıyoruz
+    bool? proceed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A), // Senin koyu teman
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text("Permissions Required", style: TextStyle(color: Colors.white)),
+        content: const Text(
+          "To scan for nearby Bluetooth devices and estimate their distance, "
+        "this app requires Bluetooth and Location permissions. "
+        "\n\nNote: Your location data is never collected or shared.",
+        style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("GRANT PERMISSIONS", style: TextStyle(color: Color(0xFF35D0FF))),
+          ),
+        ],
+      ),
+    );
+
+    if (proceed != true) return;
+
+    // 2. Şimdi gerçek sistem izinlerini istiyoruz
+    // Android 9-11 için Location, Android 12+ için Scan ve Connect gerekir.
+    Map<Permission, PermissionStatus> statuses = await [
+      Permission.bluetoothScan,
+      Permission.bluetoothConnect,
+      Permission.locationWhenInUse,
+    ].request();
+
+    // 3. İzin verildiyse taramayı başlat
+    if (statuses[Permission.bluetoothScan]?.isGranted ?? false) {
+      _startScan();
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Taramayı başlatmak için izinleri onaylamalısınız.")),
+        );
+      }
+    }
+  }  
 
   Future<void> _startScan() async {
   BeepGuard.arm();

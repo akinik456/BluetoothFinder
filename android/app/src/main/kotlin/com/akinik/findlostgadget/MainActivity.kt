@@ -1,4 +1,4 @@
-package com.example.findbles_clean
+package com.akinik.findlostgadget
 
 import io.flutter.embedding.android.FlutterActivity
 
