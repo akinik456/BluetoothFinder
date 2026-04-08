@@ -330,6 +330,19 @@ Widget _buildDeviceCard(String id, ScanResult? r, int now) {
   }
   
 Future<void> _requestPermissions() async {
+  // 1. ADIM: Önce mevcut duruma bak (Bu işlem kullanıcıya diyalog göstermez)
+  var bluetoothStatus = await Permission.bluetoothScan.status;
+  var locationStatus = await Permission.location.status;
+
+  // 2. ADIM: Eğer her iki izin de zaten verilmişse (granted), fonksiyonu burada bitir
+  if (bluetoothStatus.isGranted && locationStatus.isGranted) {
+    print("İzinler zaten tam, diyalog tetiklenmiyor.");
+    return; 
+  }
+
+  // 3. ADIM: Eğer izinler eksikse, o meşhur bilgilendirme diyaloğunu göster
+  if (!mounted) return;
+
     // 1. Önce kullanıcıya "Neden" istediğimizi açıklıyoruz
     bool? proceed = await showDialog<bool>(
       context: context,
@@ -427,6 +440,11 @@ Future<void> _requestPermissions() async {
   }
 
   Future<void> _toggleScan() async {
+  // Taramaya başlamadan hemen önce kontrol et
+  if (await Permission.location.isDenied) {
+    // Eğer kullanıcı sonradan iptal ettiyse tekrar uyar
+	_requestPermissions();    return;
+  }
   try {
     if (!isScanning) {
 
