@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
@@ -11,7 +13,7 @@ import '../models/device_model.dart';
 import '../widgets/radar_painter.dart';
 import '../widgets/custom_components.dart';
 import '../services/audio_service.dart';
-
+import '../services/trial_service.dart';
 import 'find_mode_page.dart';
 
 // ===================== HOME =====================
@@ -51,6 +53,8 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
   static const int staleAfterMs = 5000;
   static const int dropAfterMs = 30000;
   
+  bool _isExpired = false;
+  
   Map<String, SavedDevice> _saved = {};  
 
   final Set<String> _seenThisSession = <String>{};
@@ -58,6 +62,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
 @override
   void initState() {
     super.initState();
+	_checkStatus();
 	WidgetsBinding.instance.addObserver(this);
     _seenThisSession.clear();
     _sweepCtrl =
@@ -142,6 +147,18 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
       _requestPermissions();
     });
   }
+  
+  Future<void> _checkStatus() async {
+  // Veri gelene kadar bekler (await)
+  final expired = await TrialService.isExpired(); 
+  
+  if (mounted) { // Widget hala ekrandaysa güncelle
+    setState(() {
+      _isExpired = expired;
+		if(_isExpired) _toggleScan();
+    });
+  }
+}
   Future<void> _loadSaved() async {
     final loaded = await SavedStore.load();
     if (!mounted) return;
@@ -711,9 +728,86 @@ return Scaffold(
           ],
         ),
       ),
+	if (_isExpired)
+      PaywallOverlay(
+        onPurchase: () {
+          // Ödeme tetiklenecek
+          print("Initiating Purchase: \$1.99");
+        },
+      ),  
+	  
     ],
   ),
 );
 
+  }
+}
+
+class PaywallOverlay extends StatelessWidget {
+  final VoidCallback onPurchase;
+
+  const PaywallOverlay({super.key, required this.onPurchase});
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: BackdropFilter(
+        // Arkayı tam kıvamında bulandırıyoruz (Rakamlar okunmasın ama hareket görünsün)
+        filter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
+        child: Container(
+          color: const Color(0xFF081018).withOpacity(0.88), // Senin o derin koyu tonun
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Ghost Logo (Kilit ikonuyla desteklenmiş)
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  Opacity(
+                    opacity: 0.1,
+                    child: Image.asset('assets/app_icon.png', width: 200),
+                  ),
+                  const Icon(Icons.lock_outline, color: Colors.white24, size: 80),
+                ],
+              ),
+              const SizedBox(height: 30),
+              const Text(
+                "TRIAL EXPIRED",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 4,
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 50, vertical: 15),
+                child: Text(
+                  "Trial Period Ended. Unlock lifetime access to keep tracking and finding your devices without limits.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
+                ),
+              ),
+              const SizedBox(height: 25),
+              // O meşhur 1.99$ Butonu
+              ElevatedButton(
+                onPressed: onPurchase,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF007AFF),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 35, vertical: 18),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                  elevation: 10,
+                ),
+                child: const Text(
+                  "Unlock Lifetime Access - \$1.99",
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
