@@ -301,236 +301,224 @@ await _player.play(
   }
 
   @override
-  Widget build(BuildContext context) {
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
-        statusBarBrightness: Brightness.dark,
-      ),
-    );
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final hasSeen = _lastSeenMs != 0;
-    final ageMs = hasSeen ? (now - _lastSeenMs) : 999999;
-    final stale = ageMs > staleAfterMs;
+Widget build(BuildContext context) {
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+    ),
+  );
+  final now = DateTime.now().millisecondsSinceEpoch;
+  final hasSeen = _lastSeenMs != 0;
+  final ageMs = hasSeen ? (now - _lastSeenMs) : 999999;
+  final stale = ageMs > staleAfterMs;
 
-    final show = (!stale && _rssi != null);
-    final rssi = _rssi ?? -999;
+  final show = (!stale && _rssi != null);
+  final rssi = _rssi ?? -999;
 
-    final fill = show ? _rssiToFillFind(rssi) : 0.0;
-    final color = show ? _rssiColor(rssi) : Colors.white.withValues(alpha: 0.18);
-    final label = show ? _rssiToDistanceLabel(rssi) : "OUT OF RANGE";
+  final fill = show ? _rssiToFillFind(rssi) : 0.0;
+  final color = show ? _rssiColor(rssi) : Colors.white.withValues(alpha: 0.18);
+  final label = show ? _rssiToDistanceLabel(rssi) : "OUT OF RANGE";
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          // playful background
-          Positioned.fill(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xFF081018), Color(0xFF071B2A), Color(0xFF070E14)],
+  return Scaffold(
+    body: Stack(
+      children: [
+        // 1. KATMAN: Playful background (Gradient)
+        Positioned.fill(
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0xFF081018), Color(0xFF071B2A), Color(0xFF070E14)],
+              ),
+            ),
+          ),
+        ),
+
+        // 2. KATMAN: ARKA PLAN LOGOSU (Efsane dokunuş burası)
+        Positioned.fill(
+          child: IgnorePointer(
+            child: Center(
+              child: Opacity(
+                opacity: 0.07, // Radar çizgileriyle karışmaması için ideal seviye
+                child: Image.asset(
+                  'assets/app_icon.png',
+                  width: MediaQuery.of(context).size.width * 0.82,
+                  fit: BoxFit.contain,
                 ),
               ),
             ),
           ),
+        ),
 
-          // Ambient radar
-          Positioned.fill(
-            child: IgnorePointer(
-              child: AnimatedBuilder(
-                animation: Listenable.merge([_sweepCtrl, _pulseCtrl]),
-                builder: (_, __) {
-                  return CustomPaint(
-                    painter: FullScreenRadarPainter(
-                      sweepT: _sweepCtrl.value,
-                      pulseT: _pulseCtrl.value,
-                    ),
-                  );
-                },
-              ),
+        // 3. KATMAN: Ambient radar
+        // Logonun üstünde dönerek "tarama" efekti verecek
+        Positioned.fill(
+          child: IgnorePointer(
+            child: AnimatedBuilder(
+              animation: Listenable.merge([_sweepCtrl, _pulseCtrl]),
+              builder: (_, __) {
+                return CustomPaint(
+                  painter: FullScreenRadarPainter(
+                    sweepT: _sweepCtrl.value,
+                    pulseT: _pulseCtrl.value,
+                  ),
+                );
+              },
             ),
           ),
+        ),
 
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      IconPill(
-                        icon: Icons.arrow_back,
-                        onTap: () => Navigator.pop(context),
+        // 4. KATMAN: Asıl UI İçeriği
+        SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Column(
+              children: [
+                // Header (Geri butonu, cihaz adı, ses butonu)
+                Row(
+                  children: [
+                    IconPill(
+                      icon: Icons.arrow_back,
+                      onTap: () => Navigator.pop(context),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        widget.deviceName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18.5,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.3,
+                        ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          widget.deviceName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18.5,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 0.3,
+                    ),
+                    const SizedBox(width: 10),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: globalMute,
+                      builder: (context, muted, _) {
+                        return IconPill(
+                          icon: muted ? Icons.volume_off : Icons.volume_up,
+                          onTap: () {
+                            globalMute.value = !muted;
+                            if (globalMute.value) {
+                              _player.stop();
+                            }
+                            setState(() {});
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                
+                const SizedBox(height: 16),
+
+                // Main playful card (RSSI ve Mesafe bilgisi)
+                PlayCard(
+                  child: Column(
+                    children: [
+                      // ... (Mevcut PlayCard içeriğin aynen kalıyor) ...
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.92),
+                                fontSize: 18,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                          ),
+                          if (_calibrating)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(999),
+                                color: Colors.white.withValues(alpha: 0.06),
+                              ),
+                              child: Text(
+                                "Calibrating…",
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.75),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        show ? "$rssi dBm" : "—",
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 48,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      // ... (Geri kalan bar ve saniye bilgileri) ...
+                      Row(
+                        children: [
+                          Text("$_minRssi", style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 11, fontWeight: FontWeight.w700)),
+                          const Spacer(),
+                          Text("$_calMaxRssi", style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 11, fontWeight: FontWeight.w700)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        width: double.infinity,
+                        height: 18,
+                        decoration: BoxDecoration(borderRadius: BorderRadius.circular(999), color: Colors.white.withValues(alpha: 0.08)),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 120),
+                            width: (MediaQuery.of(context).size.width - 64) * fill, // Paddingleri hesaba katarak
+                            decoration: BoxDecoration(borderRadius: BorderRadius.circular(999), color: color),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      ValueListenableBuilder<bool>(
-                        valueListenable: globalMute,
-                        builder: (context, muted, _) {
-                          return IconPill(
-                            icon: muted ? Icons.volume_off : Icons.volume_up,
-                            onTap: () {
-                              globalMute.value = !muted;
-                              if (globalMute.value) {
-                                _player.stop();
-                              }
-                              setState(() {});
-                            },
-                          );
-                        },
+                      const SizedBox(height: 12),
+                      Text(
+                        show ? "Last seen: ${(ageMs / 1000).toStringAsFixed(1)}s" : "Waiting for signal…",
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 13, fontWeight: FontWeight.w700),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                ),
 
-                  // Main playful card
-                  PlayCard(
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                label,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.92),
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 1.0,
-                                ),
-                              ),
-                            ),
-                            if (_calibrating)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(999),
-                                  color: Colors.white.withValues(alpha: 0.06),
-								  
-                                ),
-                                child: Text(
-                                  "Calibrating…",
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.75),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-						  
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          show ? "$rssi dBm" : "—",
-                          style: TextStyle(
-                            color: color,
-                            fontSize: 48,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
+                const Spacer(),
 
-                        // ===== Test labels: min/max around bar =====
-                        Row(
-                          children: [
-                            Text(
-                              "$_minRssi",
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.45),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              "$_calMaxRssi",
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.45),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-
-                        // Classic bar (left -> right)
-                        Container(
-                          width: 320,
-                          height: 18,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(999),
-                            color: Colors.white.withValues(alpha: 0.08),
-                          ),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 120),
-                              width: 320 * fill,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(999),
-                                color: color,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 12),
-                        Text(
-                          show ? "Last seen: ${(ageMs / 1000).toStringAsFixed(1)}s" : "Waiting for signal…",
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.55),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const Spacer(),
-
-                  ValueListenableBuilder<bool>(
-                    valueListenable: globalMute,
-                    builder: (_, muted, __) {
-                      return Text(
-                        muted
-                            ? "Muted"
-                            : "Beep gets faster & louder as you get closer",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.45),
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 8),
-				  
-                ],
-              ),
+                ValueListenableBuilder<bool>(
+                  valueListenable: globalMute,
+                  builder: (_, muted, __) {
+                    return Text(
+                      muted ? "Muted" : "Beep gets faster & louder as you get closer",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.45),
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 }

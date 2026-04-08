@@ -10,11 +10,17 @@ import 'package:flutter/material.dart';
 // - Sweep stays VERY faint (alpha 0.05)
 
 class FullScreenRadarPainter extends CustomPainter {
-  final double sweepT; // 0..1
-  final double pulseT; // 0..1
+  final double sweepT;
+  final double pulseT;
+  final int? rssi;
+  final String? label; // Buraya label ekledik
 
-  FullScreenRadarPainter({required this.sweepT, required this.pulseT});
-
+  FullScreenRadarPainter({
+    required this.sweepT, 
+    required this.pulseT,
+    this.rssi,
+    this.label, // Buraya da ekledik
+  });
   @override
   void paint(Canvas canvas, Size size) {
     final c = Offset(size.width * 0.5, size.height * 0.42);

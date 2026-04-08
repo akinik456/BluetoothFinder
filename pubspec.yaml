@@ -72,6 +72,7 @@ flutter:
   #   - images/a_dot_ham.jpeg
   assets:
     - assets/beep.wav
+    - assets/app_icon.png
     
 flutter_launcher_icons:
   android: "launcher_icon"

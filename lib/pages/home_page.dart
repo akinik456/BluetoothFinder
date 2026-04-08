@@ -565,139 +565,137 @@ for (final id in visibleIds) {
 	final savedIds = sortedIds.where((id) => _saved.containsKey(id)).toList();
 	final nearbyIds = sortedIds.where((id) => !_saved.containsKey(id)).toList();	
 	
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Background
-          Positioned.fill(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Color(0xFF081018),
-                    Color(0xFF081A24),
-                    Color(0xFF070E14),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Ambient radar background while scanning
-          Positioned.fill(
-            child: IgnorePointer(
-              child: AnimatedOpacity(
-                opacity: isScanning ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 250),
-                child: AnimatedBuilder(
-                  animation: Listenable.merge([_sweepCtrl, _pulseCtrl]),
-                  builder: (context, _) {
-                    return CustomPaint(
-                      painter: FullScreenRadarPainter(
-                        sweepT: _sweepCtrl.value,
-                        pulseT: _pulseCtrl.value,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-
-          SafeArea(
-            child: Column(
-              children: [
-                // Header (playful)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-                  child: HeaderPlayful(
-                    isScanning: isScanning,
-                    deviceCount: visibleResults.length,
-                  ),
-                ),
-
-                // Big primary scan button panel
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: ScanPanelPlayful(
-                    isScanning: isScanning,
-                    onToggle: _toggleScan,
-                  ),
-                ),
-				const SizedBox(height: 6),
-
-Padding(
-  padding: const EdgeInsets.symmetric(horizontal: 16),
-  child: Row(
-    mainAxisAlignment: MainAxisAlignment.center,
+return Scaffold(
+  body: Stack(
     children: [
-      Text(
-        "Tap for details",
-        maxLines: 1,
-  overflow: TextOverflow.ellipsis,
-  style: const TextStyle(
-    fontSize: 16,
-    fontWeight: FontWeight.w600,
-    letterSpacing: 0.2,
+      // 1. KATMAN: Arka Plan Gradient
+      Positioned.fill(
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xFF081018),
+                Color(0xFF081A24),
+                Color(0xFF070E14),
+              ],
+            ),
+          ),
         ),
       ),
-      const SizedBox(width: 8),
-      Text(
-        "•",
-        style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.35),
+
+      // 2. KATMAN: App Icon (Logo) Arka Planı
+      // Radar efektinin hemen arkasında, çok hafif şeffaflıkla
+      Positioned.fill(
+        child: Center(
+          child: Opacity(
+  // 0.05 - 0.20 arası senin ekranına göre ayarla
+  // 0.15 genellikle "premium" bir derinlik verir
+  opacity: 0.15, 
+  child: Image.asset(
+    'assets/app_icon.png',
+    // Ekranın %85'ini kaplasın ki heybetli dursun
+    width: MediaQuery.of(context).size.width * 0.85,
+    fit: BoxFit.contain,
+    // RENK FİLTRESİNİ SİLDİK, ARTIK SAF HALİYLE GELİYOR
+  ),
+),
         ),
       ),
-      const SizedBox(width: 8),
-      Text(
-        "Hold to find",
-        maxLines: 1,
-  overflow: TextOverflow.ellipsis,
-  style: const TextStyle(
-    fontSize: 16,
-    fontWeight: FontWeight.w600,
-    letterSpacing: 0.2,
+
+      // 3. KATMAN: Ambient radar background while scanning
+      Positioned.fill(
+        child: IgnorePointer(
+          child: AnimatedOpacity(
+            opacity: isScanning ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 250),
+            child: AnimatedBuilder(
+              animation: Listenable.merge([_sweepCtrl, _pulseCtrl]),
+              builder: (context, _) {
+                return CustomPaint(
+                  painter: FullScreenRadarPainter(
+                    sweepT: _sweepCtrl.value,
+                    pulseT: _pulseCtrl.value,
+                    label: '', // Boş label
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+
+      // 4. KATMAN: Ana İçerik
+      SafeArea(
+        child: Column(
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+              child: HeaderPlayful(
+                isScanning: isScanning,
+                deviceCount: visibleResults.length,
+              ),
+            ),
+
+            // Scan Button Panel
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: ScanPanelPlayful(
+                isScanning: isScanning,
+                onToggle: _toggleScan,
+              ),
+            ),
+            
+            const SizedBox(height: 6),
+
+            // Info Row
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text("Tap for details", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  const SizedBox(width: 8),
+                  Text("•", style: TextStyle(color: Colors.white.withValues(alpha: 0.35))),
+                  const SizedBox(width: 8),
+                  const Text("Hold to find", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 6),
+
+            // Device List
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: visibleResults.isEmpty
+                    ? EmptyStatePlayful(isScanning: isScanning)
+                    : ListView(
+                        padding: const EdgeInsets.only(top: 6, bottom: 10),
+                        children: [
+                          if (savedIds.isNotEmpty) ...[
+                            const SectionHeader(title: "SAVED"),
+                            for (final id in savedIds)
+                              _buildDeviceCard(id, visibleResults[id], now),
+                          ],
+                          if (nearbyIds.isNotEmpty) ...[
+                            const SectionHeader(title: "NEARBY"),
+                            for (final id in nearbyIds)
+                              _buildDeviceCard(id, visibleResults[id], now),
+                          ],
+                        ],
+                      ),
+              ),
+            ),
+          ],
         ),
       ),
     ],
   ),
-),
+);
 
-
-
-
-	
-  const SizedBox(height: 6),
-// Device list
-Expanded(
-  child: Padding(
-    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-    child: visibleResults.isEmpty
-        ? EmptyStatePlayful(isScanning: isScanning)
-        : ListView(
-            padding: const EdgeInsets.only(top: 6, bottom: 10),
-            children: [
-              if (savedIds.isNotEmpty) ...[
-                const SectionHeader(title: "SAVED"),
-                for (final id in savedIds)
-                  _buildDeviceCard(id, visibleResults[id], now),
-              ],
-              if (nearbyIds.isNotEmpty) ...[
-                const SectionHeader(title: "NEARBY"),
-                for (final id in nearbyIds)
-                  _buildDeviceCard(id, visibleResults[id], now),
-              ],
-            ],
-          ),
-  ),
-),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
