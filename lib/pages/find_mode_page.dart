@@ -46,7 +46,7 @@ class _FindModePageState extends State<FindModePage>
 
   late final AnimationController _sweepCtrl;
   late final AnimationController _pulseCtrl;
-
+  
   late final AudioPlayer _player;
   bool _audioReady = false;
 
@@ -231,7 +231,7 @@ await _player.play(
 
       }
     });
-  }
+	}
   
 Future<void> _checkStatus() async {
   // Veri gelene kadar bekler (await)

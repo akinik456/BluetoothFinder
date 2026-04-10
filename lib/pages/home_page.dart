@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:bluetoothfinder/core/scan_watchdog.dart';
 
 import '../core/app_settings.dart';
 import '../services/storage_service.dart';
@@ -34,6 +35,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
   
   late final AnimationController _sweepCtrl;
   late final AnimationController _pulseCtrl;
+  late final ScanWatchdog _watchdog;
 
   StreamSubscription<List<ScanResult>>? _scanSub;
   StreamSubscription<bool>? _isScanningSub;
@@ -93,6 +95,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
         _seenThisSession.add(id);
         _latest[id] = r;
         _lastSeenMs[id] = now;
+		_watchdog.markSeen();
 
         // --- EMA smoothing ---
         const double alpha = 0.25; // 0.15 smoother, 0.33 faster
@@ -146,6 +149,15 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _requestPermissions();
     });
+	_watchdog = ScanWatchdog(
+  onRecover: () async {
+    print("WATCHDOG: recovery start");
+    await _stopScan();
+    await Future.delayed(const Duration(milliseconds: 800));
+    await _startScan();
+    print("WATCHDOG: recovery done");
+  },
+);
   }
   
   Future<void> _checkStatus() async {
@@ -173,6 +185,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
     _tick?.cancel();
     _sweepCtrl.dispose();
     _pulseCtrl.dispose();
+	_watchdog.dispose();
 	WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -406,6 +419,8 @@ Future<void> _requestPermissions() async {
   }  
 
   Future<void> _startScan() async {
+  _watchdog.resetSession();
+_watchdog.start();
   BeepGuard.arm();
     await _ensurePermissions();
 	if (!mounted) return;
@@ -452,6 +467,7 @@ Future<void> _requestPermissions() async {
   }
 
   Future<void> _stopScan() async {
+  _watchdog.stop();
   BeepGuard.killNow();
     await FlutterBluePlus.stopScan();
   }

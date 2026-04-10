@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 
 class TrialService {
   static const String _key = 'first_launch_date';
-  static const int trialDays = 15;
+  static const int trialDays = 2;
   
   static const bool debugForceExpire = false;
 
