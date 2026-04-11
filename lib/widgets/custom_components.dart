@@ -590,7 +590,7 @@ class DeviceDetails extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            "Tap: Find Mode • Long-press: pin & details",
+            "Tap: pin & details • Long-press: Find Mode ",
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.42),
               fontSize: 11.3,
