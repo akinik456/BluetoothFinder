@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:bluetoothfinder/core/scan_watchdog.dart';
+import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../core/app_settings.dart';
 import '../services/storage_service.dart';
@@ -15,6 +16,8 @@ import '../widgets/radar_painter.dart';
 import '../widgets/custom_components.dart';
 import '../services/audio_service.dart';
 import '../services/trial_service.dart';
+import '../services/revenue_cat_service.dart';
+
 import 'find_mode_page.dart';
 
 // ===================== HOME =====================
@@ -807,19 +810,37 @@ class PaywallOverlay extends StatelessWidget {
               const SizedBox(height: 25),
               // O meşhur 1.99$ Butonu
               ElevatedButton(
-                onPressed: onPurchase,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF007AFF),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 35, vertical: 18),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                  elevation: 10,
-                ),
-                child: const Text(
-                  "Unlock Lifetime Access - \$1.99",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
+				  style: ElevatedButton.styleFrom(
+					padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+				  ),
+				  onPressed: () async {
+					try {
+					  // 1. Paneldeki teklifi çek
+					  Offerings offerings = await Purchases.getOfferings();
+					  
+					  if (offerings.current != null && offerings.current!.lifetime != null) {
+						// Satın alma işlemini başlat
+						final purchaseResult = await Purchases.purchasePackage(offerings.current!.lifetime!);
+
+						// Yetkiyi kontrol et
+						final entitlements = purchaseResult.customerInfo.entitlements.all;
+
+						if (entitlements["Find Lost Gadget By Lynra Pro"]?.isActive == true) {
+						  print("Lynra Pro Aktif edildi!");
+						  // Burada istersen kullanıcıyı ödüllendirip perdeyi kapatabilirsin
+						}
+					  } else {
+						print("Teklif bulunamadı.");
+					  }
+					} catch (e) {
+					  print("Satın alma tetikleme hatası: $e");
+					}
+				  },
+				  child: const Text(
+					"Unlock Lifetime Access - \$1.99",
+					style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+				  ),
+				),
             ],
           ),
         ),

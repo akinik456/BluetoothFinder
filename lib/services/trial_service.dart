@@ -24,13 +24,13 @@ class TrialService {
   
     final prefs = await SharedPreferences.getInstance();
     final dateStr = prefs.getString(_key);
-    
+    print("dateStr:$dateStr");
     if (dateStr == null) return false;
 
     final firstLaunch = DateTime.parse(dateStr);
     final now = DateTime.now();
-    final difference = now.difference(firstLaunch).inDays;
-
+    final difference = now.difference(firstLaunch).inMinutes;//.inDays;
+	print("difference:$difference");
     return difference >= trialDays;
   }
 }
