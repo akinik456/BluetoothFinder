@@ -22,6 +22,44 @@ class RevenueCatService {
       return false;
     }
   }
+  
+  static Future<bool> purchasePro() async {
+  try {
+    Offerings offerings = await Purchases.getOfferings();
+    if (offerings.current != null && offerings.current!.monthly != null) {
+      // Değişen kısım burası: CustomerInfo yerine PurchaseResult geliyor
+      var purchaseResult = await Purchases.purchasePackage(offerings.current!.monthly!);
+      
+      // Satın alma sonucundaki customerInfo'yu alıp kontrol ediyoruz
+      return purchaseResult.customerInfo.entitlements.all["pro"]?.isActive ?? false;
+    }
+  } catch (e) {
+    print("Satın alma hatası: $e");
+  }
+  return false;
+}
+
+static Future<bool> isUserPremium() async {
+  try {
+    CustomerInfo customerInfo = await Purchases.getCustomerInfo();
+    
+    // Panelindeki tüm aktif yetkileri loglayalım ki adını kesin görelim
+    print("WATCHDOG: Aktif Yetkiler: ${customerInfo.entitlements.active.keys}");
+
+    // Eğer yetki listesi boş değilse, bu adam ödeme yapmıştır
+    if (customerInfo.entitlements.active.isNotEmpty) {
+      return true; 
+    }
+
+    // Veya paneldeki tam ismi buraya yaz (Genelde ID ismidir)
+    // return customerInfo.entitlements.all["Find Lost Gadget By Lynra Pro"]?.isActive ?? false;
+    
+    return false;
+  } catch (e) {
+    print("Hata: $e");
+    return false;
+  }
+}
 
   // Satın alımı geri yükle (Restore Button için)
   static Future<bool> restore() async {

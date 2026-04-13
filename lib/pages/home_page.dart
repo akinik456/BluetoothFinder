@@ -762,10 +762,11 @@ return Scaffold(
   }
 }
 
+// 'const' kelimesini sildik
 class PaywallOverlay extends StatelessWidget {
-  final VoidCallback onPurchase;
+  final VoidCallback onPurchase; // Bu zaten varmış
 
-  const PaywallOverlay({super.key, required this.onPurchase});
+  PaywallOverlay({super.key, required this.onPurchase}); // const kaldırıldı
 
   @override
   Widget build(BuildContext context) {
@@ -813,29 +814,46 @@ class PaywallOverlay extends StatelessWidget {
 				  style: ElevatedButton.styleFrom(
 					padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
 				  ),
-				  onPressed: () async {
-					try {
-					  // 1. Paneldeki teklifi çek
-					  Offerings offerings = await Purchases.getOfferings();
-					  
-					  if (offerings.current != null && offerings.current!.lifetime != null) {
-						// Satın alma işlemini başlat
-						final purchaseResult = await Purchases.purchasePackage(offerings.current!.lifetime!);
+				  // home_page.dart içindeki o butonu bul ve onPressed kısmını şöyle güncelle:
+onPressed: () async {
+  try {
+    print("Satın alma başlatılıyor...");
+    Offerings offerings = await Purchases.getOfferings();
+    
+    Package? packageToBuy;
 
-						// Yetkiyi kontrol et
-						final entitlements = purchaseResult.customerInfo.entitlements.all;
+    // 1. Önce 'current' içindeki paketi dene
+    if (offerings.current != null && offerings.current!.availablePackages.isNotEmpty) {
+      packageToBuy = offerings.current!.availablePackages.first;
+      print("Current paketi seçildi: ${packageToBuy.identifier}");
+    } 
+    // 2. Eğer current boşsa, eldeki tüm tekliflerin içine bak (Zorla bulma)
+    else if (offerings.all.isNotEmpty) {
+      print("Current boş, tüm listeyi tarıyorum...");
+      for (var offering in offerings.all.values) {
+        if (offering.availablePackages.isNotEmpty) {
+          packageToBuy = offering.availablePackages.first;
+          print("Alternatif paket bulundu: ${packageToBuy.identifier}");
+          break;
+        }
+      }
+    }
 
-						if (entitlements["Find Lost Gadget By Lynra Pro"]?.isActive == true) {
-						  print("Lynra Pro Aktif edildi!");
-						  // Burada istersen kullanıcıyı ödüllendirip perdeyi kapatabilirsin
-						}
-					  } else {
-						print("Teklif bulunamadı.");
-					  }
-					} catch (e) {
-					  print("Satın alma tetikleme hatası: $e");
-					}
-				  },
+    if (packageToBuy != null) {
+      print("Google Play penceresi açılıyor...");
+      var result = await Purchases.purchasePackage(packageToBuy);
+      
+      if (result.customerInfo.entitlements.all["pro"]?.isActive ?? false) {
+        onPurchase();
+        if (context.mounted) Navigator.pop(context);
+      }
+    } else {
+      print("HATA: RevenueCat'te hiçbir paket bulunamadı! Panelden 'Packages' kısmını kontrol et.");
+    }
+  } catch (e) {
+    print("Hata veya İptal: $e");
+  }
+},
 				  child: const Text(
 					"Unlock Lifetime Access - \$1.99",
 					style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),

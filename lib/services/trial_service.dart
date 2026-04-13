@@ -3,6 +3,8 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../services/revenue_cat_service.dart';
+
 
 class TrialService {
   static const String _key = 'first_launch_date';
@@ -18,19 +20,31 @@ class TrialService {
     }
   }
 
-  // Deneme süresi doldu mu?
   static Future<bool> isExpired() async {
-    if (debugForceExpire) return true;
-  
-    final prefs = await SharedPreferences.getInstance();
-    final dateStr = prefs.getString(_key);
-    print("dateStr:$dateStr");
-    if (dateStr == null) return false;
+  if (debugForceExpire) return true;
 
-    final firstLaunch = DateTime.parse(dateStr);
-    final now = DateTime.now();
-    final difference = now.difference(firstLaunch).inMinutes;//.inDays;
-	print("difference:$difference");
-    return difference >= trialDays;
+  // 1. ÖNCE REVENUECAT'E SOR: Bu adam zaten Pro mu?
+  // Eğer Pro ise süreye bakmaya bile gerek yok, asla 'expired' (süresi dolmuş) sayılmaz.
+  bool isPremium = await RevenueCatService.isUserPremium();
+  if (isPremium) {
+    print("WATCHDOG: Kullanıcı Premium, kilitler açılıyor.");
+    return false; // Süresi dolmuş sayılmaz, serbest bırak
   }
+  return true;
+
+  // 2. EĞER PREMIUM DEĞİLSE, ZAMANA BAK:
+  final prefs = await SharedPreferences.getInstance();
+  final dateStr = prefs.getString(_key);
+  print("dateStr:$dateStr");
+  if (dateStr == null) return false;
+
+  final firstLaunch = DateTime.parse(dateStr);
+  final now = DateTime.now();
+  final difference = now.difference(firstLaunch).inMinutes; 
+  
+  print("difference:$difference");
+  
+  // Eğer süre dolmuşsa 'true' (yani kilitli), dolmamışsa 'false' dönecek
+  return difference >= trialDays;
+}
 }
