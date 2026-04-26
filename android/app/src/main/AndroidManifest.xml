@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.akinik.findlostgadget">
+    package="com.akinik.findlostgadget.app">
+    <uses-permission android:name="com.android.vending.BILLING"/>
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
 
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" 

@@ -1,0 +1,5 @@
+class BeepGuard {  
+  static void register(AudioPlayer p) {activePlayer = p;}
+  static void killNow() {}
+  static void arm() {}
+}

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../services/revenue_cat_service.dart';
 
 
 class TrialService {
@@ -25,11 +24,11 @@ class TrialService {
 
   // 1. ÖNCE REVENUECAT'E SOR: Bu adam zaten Pro mu?
   // Eğer Pro ise süreye bakmaya bile gerek yok, asla 'expired' (süresi dolmuş) sayılmaz.
-  bool isPremium = await RevenueCatService.isUserPremium();
+  /*bool isPremium = await RevenueCatService.isUserPremium();
   if (isPremium) {
     print("WATCHDOG: Kullanıcı Premium, kilitler açılıyor.");
     return false; // Süresi dolmuş sayılmaz, serbest bırak
-  }
+  }*/
   return true;
 
   // 2. EĞER PREMIUM DEĞİLSE, ZAMANA BAK:

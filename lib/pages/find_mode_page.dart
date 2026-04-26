@@ -8,12 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
-import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../core/app_settings.dart';
 import '../services/audio_service.dart';
 import '../services/trial_service.dart';
-import '../services/revenue_cat_service.dart';
 
 import '../widgets/radar_painter.dart';
 import '../widgets/custom_components.dart';
@@ -54,6 +52,7 @@ class _FindModePageState extends State<FindModePage>
   bool _audioReady = false;
 
   static const int staleAfterMs = 3500;
+	
   
   // ===== Auto-calibration =====
   static const int _minRssi = -85; // left side label (far reference)
@@ -72,7 +71,7 @@ bool _isExpired = false;
   @override
   void initState() {
     super.initState();
-	_checkStatus();
+	//_checkStatus();
 WidgetsBinding.instance.addObserver(this);
     final now = DateTime.now().millisecondsSinceEpoch;
 
@@ -602,9 +601,9 @@ class PaywallOverlay extends StatelessWidget {
 					padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
 				  ),
 				  onPressed: () async {
-  try {
+  /*try {
     print("Satın alma başlatılıyor...");
-    Offerings offerings = await Purchases.getOfferings();
+    //Offerings offerings = await Purchases.getOfferings();
     
     Package? packageToBuy;
 
@@ -627,7 +626,7 @@ class PaywallOverlay extends StatelessWidget {
 
     if (packageToBuy != null) {
       print("Google Play penceresi açılıyor...");
-      var result = await Purchases.purchasePackage(packageToBuy);
+      //var result = await Purchases.purchasePackage(packageToBuy);
       
       if (result.customerInfo.entitlements.all["pro"]?.isActive ?? false) {
         onPurchase();
@@ -638,7 +637,7 @@ class PaywallOverlay extends StatelessWidget {
     }
   } catch (e) {
     print("Hata veya İptal: $e");
-  }
+  }*/
 },
 				  child: const Text(
 					"Unlock Lifetime Access - \$1.99",

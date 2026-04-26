@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:bluetoothfinder/core/scan_watchdog.dart';
-import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 
 import '../core/app_settings.dart';
 import '../services/storage_service.dart';
@@ -16,7 +16,6 @@ import '../widgets/radar_painter.dart';
 import '../widgets/custom_components.dart';
 import '../services/audio_service.dart';
 import '../services/trial_service.dart';
-import '../services/revenue_cat_service.dart';
 
 import 'find_mode_page.dart';
 
@@ -38,7 +37,10 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
   
   late final AnimationController _sweepCtrl;
   late final AnimationController _pulseCtrl;
-  late final ScanWatchdog _watchdog;
+  //late final ScanWatchdog _watchdog;
+	
+	StreamSubscription<List<PurchaseDetails>>? _purchaseSub;
+	bool _isPremium = false;
 
   StreamSubscription<List<ScanResult>>? _scanSub;
   StreamSubscription<bool>? _isScanningSub;
@@ -67,7 +69,27 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
 @override
   void initState() {
     super.initState();
-	_checkStatus();
+		_purchaseSub = InAppPurchase.instance.purchaseStream.listen((purchases) async {
+	for (final purchase in purchases) {
+    print("PURCHASE STATUS: ${purchase.status}");
+
+    if (purchase.status == PurchaseStatus.purchased ||
+        purchase.status == PurchaseStatus.restored) {
+      print("PURCHASE OK: ${purchase.productID}");
+			setState(() {
+  _isPremium = true;
+});
+    }
+
+    if (purchase.pendingCompletePurchase) {
+      await InAppPurchase.instance.completePurchase(purchase);
+    }
+  }
+});
+
+unawaited(_restorePurchases());
+		
+	//_checkStatus();
 	WidgetsBinding.instance.addObserver(this);
     _seenThisSession.clear();
     _sweepCtrl =
@@ -98,7 +120,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
         _seenThisSession.add(id);
         _latest[id] = r;
         _lastSeenMs[id] = now;
-		_watchdog.markSeen();
+		//_watchdog.markSeen();
 
         // --- EMA smoothing ---
         const double alpha = 0.25; // 0.15 smoother, 0.33 faster
@@ -152,7 +174,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _requestPermissions();
     });
-	_watchdog = ScanWatchdog(
+	/*_watchdog = ScanWatchdog(
   onRecover: () async {
     print("WATCHDOG: recovery start");
     await _stopScan();
@@ -160,7 +182,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
     await _startScan();
     print("WATCHDOG: recovery done");
   },
-);
+);*/
   }
   
   Future<void> _checkStatus() async {
@@ -188,9 +210,10 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
     _tick?.cancel();
     _sweepCtrl.dispose();
     _pulseCtrl.dispose();
-	_watchdog.dispose();
+	//_watchdog.dispose();
 	WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+		_purchaseSub?.cancel();
   }
 
   // -------- logic helpers --------
@@ -422,8 +445,8 @@ Future<void> _requestPermissions() async {
   }  
 
   Future<void> _startScan() async {
-  _watchdog.resetSession();
-_watchdog.start();
+  //_watchdog.resetSession();
+	//_watchdog.start();
   BeepGuard.arm();
     await _ensurePermissions();
 	if (!mounted) return;
@@ -467,10 +490,15 @@ _watchdog.start();
       continuousDivisor: 1,
       androidScanMode: AndroidScanMode.lowLatency,
     );
+		Future.delayed(const Duration(seconds: 15), () async {
+			if (isScanning && !_isPremium) {
+			await _stopScan();
+			}
+		});
   }
 
   Future<void> _stopScan() async {
-  _watchdog.stop();
+  //_watchdog.stop();
   BeepGuard.killNow();
     await FlutterBluePlus.stopScan();
   }
@@ -618,7 +646,9 @@ for (final id in visibleIds) {
 	
 	final savedIds = sortedIds.where((id) => _saved.containsKey(id)).toList();
 	final nearbyIds = sortedIds.where((id) => !_saved.containsKey(id)).toList();	
-	
+	final limitedNearbyIds = _isPremium
+    ? nearbyIds
+    : nearbyIds.take(2).toList();
 return Scaffold(
   body: Stack(
     children: [
@@ -737,13 +767,49 @@ return Scaffold(
                           ],
                           if (nearbyIds.isNotEmpty) ...[
                             const SectionHeader(title: "NEARBY"),
-                            for (final id in nearbyIds)
+                            for (final id in limitedNearbyIds)
                               _buildDeviceCard(id, visibleResults[id], now),
                           ],
                         ],
                       ),
               ),
             ),
+						Padding(
+  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+  child: Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: Colors.white.withValues(alpha: 0.08),
+      borderRadius: BorderRadius.circular(18),
+      border: Border.all(
+        color: Colors.white.withValues(alpha: 0.12),
+      ),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            _isPremium
+                ? "Premium active • unlimited scan and devices"
+                : "Premium: unlimited scan and unlimited devices.",
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        if (!_isPremium)
+          ElevatedButton(
+            onPressed: _buy,
+            child: const Text("Upgrade"),
+          ),
+      ],
+    ),
+  ),
+),
+						
           ],
         ),
       ),
@@ -760,6 +826,45 @@ return Scaffold(
 );
 
   }
+	
+Future<void> _testIap() async {
+  final bool available = await InAppPurchase.instance.isAvailable();
+  print("IAP available: $available");
+
+  const ids = <String>{'premium_unlock'};
+  final response = await InAppPurchase.instance.queryProductDetails(ids);
+
+  print("Found products: ${response.productDetails.length}");
+  for (var p in response.productDetails) {
+    print("Product: ${p.id} - ${p.price}");
+  }
+
+  if (response.notFoundIDs.isNotEmpty) {
+    print("Not found: ${response.notFoundIDs}");
+  }
+}	
+
+Future<void> _buy() async {
+  const ids = <String>{'premium_unlock'};
+  final response = await InAppPurchase.instance.queryProductDetails(ids);
+
+  if (response.productDetails.isEmpty) {
+    print("Product not found");
+    return;
+  }
+
+  final product = response.productDetails.first;
+
+  final purchaseParam = PurchaseParam(productDetails: product);
+
+  await InAppPurchase.instance.buyNonConsumable(
+    purchaseParam: purchaseParam,
+  );
+}
+Future<void> _restorePurchases() async {
+  await InAppPurchase.instance.restorePurchases();
+}
+	
 }
 
 // 'const' kelimesini sildik
@@ -816,9 +921,9 @@ class PaywallOverlay extends StatelessWidget {
 				  ),
 				  // home_page.dart içindeki o butonu bul ve onPressed kısmını şöyle güncelle:
 onPressed: () async {
-  try {
+  /*try {
     print("Satın alma başlatılıyor...");
-    Offerings offerings = await Purchases.getOfferings();
+    //Offerings offerings = await Purchases.getOfferings();
     
     Package? packageToBuy;
 
@@ -841,7 +946,7 @@ onPressed: () async {
 
     if (packageToBuy != null) {
       print("Google Play penceresi açılıyor...");
-      var result = await Purchases.purchasePackage(packageToBuy);
+      //var result = await Purchases.purchasePackage(packageToBuy);
       
       if (result.customerInfo.entitlements.all["pro"]?.isActive ?? false) {
         onPurchase();
@@ -852,7 +957,7 @@ onPressed: () async {
     }
   } catch (e) {
     print("Hata veya İptal: $e");
-  }
+  }*/
 },
 				  child: const Text(
 					"Unlock Lifetime Access - \$1.99",

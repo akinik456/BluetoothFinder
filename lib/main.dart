@@ -17,7 +17,6 @@ import 'models/device_model.dart';
 import 'services/storage_service.dart';
 import 'services/audio_service.dart';
 import 'services/trial_service.dart';
-import 'services/revenue_cat_service.dart';
 
 import 'pages/home_page.dart';
 import 'pages/find_mode_page.dart';
@@ -25,10 +24,8 @@ import 'pages/find_mode_page.dart';
 void main() async {
   // Flutter binding'lerini hazırla (Async işlemler için şart)
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-  // RevenueCat'i uyandıralım
-  await RevenueCatService.init();
   // İlk açılış tarihini kaydet (Trial için)
-  await TrialService.recordFirstLaunch();
+  //await TrialService.recordFirstLaunch();
 
   runApp(const FindLostGadgetApp());
 }

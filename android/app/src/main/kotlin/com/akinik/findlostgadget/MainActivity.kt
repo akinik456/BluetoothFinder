@@ -1,4 +1,4 @@
-package com.akinik.findlostgadget
+package com.akinik.findlostgadget.app
 
 import io.flutter.embedding.android.FlutterActivity
 
