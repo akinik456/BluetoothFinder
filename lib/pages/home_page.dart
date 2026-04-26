@@ -43,6 +43,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
 
   StreamSubscription<List<ScanResult>>? _scanSub;
   StreamSubscription<bool>? _isScanningSub;
+	StreamSubscription<BluetoothAdapterState>? _adapterStateSub;
   Timer? _tick;
 
   final Map<String, ScanResult> _latest = {};
@@ -160,6 +161,19 @@ unawaited(_restorePurchases());
 
       if (mounted) setState(() {});
     });
+		
+		_adapterStateSub = FlutterBluePlus.adapterState.listen((state) async {
+  if (!mounted) return;
+
+  if (state == BluetoothAdapterState.on) {
+    // Bluetooth geri açıldı → gerçek durumu tekrar al
+    final scanning = FlutterBluePlus.isScanningNow;
+    setState(() => isScanning = scanning);
+  } else {
+    // Bluetooth kapandı → UI'ı stop konumuna çek
+    setState(() => isScanning = false);
+  }
+});
 
     _tick = Timer.periodic(const Duration(milliseconds: 700), (_) {
       if (!mounted) return;
