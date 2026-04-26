@@ -41,3 +41,17 @@ class SavedStore {
     await prefs.setString(_key, jsonEncode(list));
   }
 }
+
+class PremiumStore {
+  static const _premiumKey = 'is_premium';
+
+  static Future<void> setPremium(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_premiumKey, value);
+  }
+
+  static Future<bool> getPremium() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_premiumKey) ?? false;
+  }
+}

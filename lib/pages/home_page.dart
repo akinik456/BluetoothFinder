@@ -75,6 +75,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
 
     if (purchase.status == PurchaseStatus.purchased ||
         purchase.status == PurchaseStatus.restored) {
+	await PremiumStore.setPremium(true);
       print("PURCHASE OK: ${purchase.productID}");
 			setState(() {
   _isPremium = true;
@@ -89,7 +90,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
 
 unawaited(_restorePurchases());
 		
-	//_checkStatus();
+	_checkStatus();
 	WidgetsBinding.instance.addObserver(this);
     _seenThisSession.clear();
     _sweepCtrl =
@@ -186,15 +187,12 @@ unawaited(_restorePurchases());
   }
   
   Future<void> _checkStatus() async {
-  // Veri gelene kadar bekler (await)
-  final expired = await TrialService.isExpired(); 
-  
-  if (mounted) { // Widget hala ekrandaysa güncelle
-    setState(() {
-      _isExpired = expired;
-		if(_isExpired) _toggleScan();
-    });
-  }
+  final cached = await PremiumStore.getPremium();
+if (cached) {
+  setState(() {
+    _isPremium = true;
+  });
+}
 }
   Future<void> _loadSaved() async {
     final loaded = await SavedStore.load();

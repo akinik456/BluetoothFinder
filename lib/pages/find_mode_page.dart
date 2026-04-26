@@ -71,8 +71,7 @@ bool _isExpired = false;
   @override
   void initState() {
     super.initState();
-	//_checkStatus();
-WidgetsBinding.instance.addObserver(this);
+	WidgetsBinding.instance.addObserver(this);
     final now = DateTime.now().millisecondsSinceEpoch;
 
     // Restore best-so-far calibration if present
@@ -235,17 +234,6 @@ await _player.play(
     });
 	}
   
-Future<void> _checkStatus() async {
-  // Veri gelene kadar bekler (await)
-  final expired = await TrialService.isExpired(); 
-  
-  if (mounted) { // Widget hala ekrandaysa güncelle
-    setState(() {
-      _isExpired = expired;
-    });
-  }
-}  
-
   void _persistCalibrationIfBetter() {
     final prev = calibratedMaxById[widget.deviceId];
     if (prev == null || _calMaxRssi > prev) {
