@@ -15,7 +15,6 @@ import '../models/device_model.dart';
 import '../widgets/radar_painter.dart';
 import '../widgets/custom_components.dart';
 import '../services/audio_service.dart';
-import '../services/trial_service.dart';
 
 import 'find_mode_page.dart';
 
@@ -37,7 +36,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
   
   late final AnimationController _sweepCtrl;
   late final AnimationController _pulseCtrl;
-  //late final ScanWatchdog _watchdog;
+  late final ScanWatchdog _watchdog;
 	
 	StreamSubscription<List<PurchaseDetails>>? _purchaseSub;
 	bool _isPremium = false;
@@ -59,9 +58,6 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
   // Stability thresholds
   static const int staleAfterMs = 5000;
   static const int dropAfterMs = 30000;
-  
-  bool _isExpired = false;
-  
   Map<String, SavedDevice> _saved = {};  
 
   final Set<String> _seenThisSession = <String>{};
@@ -121,7 +117,9 @@ unawaited(_restorePurchases());
         _seenThisSession.add(id);
         _latest[id] = r;
         _lastSeenMs[id] = now;
-		//_watchdog.markSeen();
+		if (_isPremium) {
+  _watchdog.markSeen();
+}
 
         // --- EMA smoothing ---
         const double alpha = 0.25; // 0.15 smoother, 0.33 faster
@@ -175,15 +173,18 @@ unawaited(_restorePurchases());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _requestPermissions();
     });
-	/*_watchdog = ScanWatchdog(
+	_watchdog = ScanWatchdog(
+  stallThreshold: const Duration(seconds: 20),
   onRecover: () async {
+    if (!_isPremium) return;
+
     print("WATCHDOG: recovery start");
     await _stopScan();
     await Future.delayed(const Duration(milliseconds: 800));
     await _startScan();
     print("WATCHDOG: recovery done");
   },
-);*/
+);
   }
   
   Future<void> _checkStatus() async {
@@ -208,7 +209,7 @@ if (cached) {
     _tick?.cancel();
     _sweepCtrl.dispose();
     _pulseCtrl.dispose();
-	//_watchdog.dispose();
+	_watchdog.dispose();
 	WidgetsBinding.instance.removeObserver(this);
     super.dispose();
 		_purchaseSub?.cancel();
@@ -443,8 +444,10 @@ Future<void> _requestPermissions() async {
   }  
 
   Future<void> _startScan() async {
-  //_watchdog.resetSession();
-	//_watchdog.start();
+  if (_isPremium) {
+  _watchdog.resetSession();
+  _watchdog.start();
+}
   BeepGuard.arm();
     await _ensurePermissions();
 	if (!mounted) return;
@@ -496,7 +499,7 @@ Future<void> _requestPermissions() async {
   }
 
   Future<void> _stopScan() async {
-  //_watchdog.stop();
+  _watchdog.stop();
   BeepGuard.killNow();
     await FlutterBluePlus.stopScan();
   }
@@ -548,29 +551,30 @@ Future<void> _requestPermissions() async {
     );
   }
 
-  void _toggleDetails(String id) {
-    setState(() {
-      if (_expandedId == id) {
-        _expandedId = null;
+		void _toggleDetails(String id) {
+			setState(() {
+				if (_expandedId == id) {
+					_expandedId = null;
 
-        // restore sorted order by smoothed rssi
-        final entries = _latest.entries.toList();
-        entries.sort((a, b) {
-          final ar = (_rssiEma[a.key]?.round()) ?? a.value.rssi;
-          final br = (_rssiEma[b.key]?.round()) ?? b.value.rssi;
-          return br.compareTo(ar);
-        });
-        _orderIds
-          ..clear()
-          ..addAll(entries.map((e) => e.key));
-      } else {
-        _expandedId = id;
-        if (_orderIds.isEmpty) _orderIds.addAll(_latest.keys);
-        _orderIds.remove(id);
-        _orderIds.insert(0, id);
-      }
-    });
-  }
+					// restore sorted order by smoothed rssi
+					final entries = _latest.entries.toList();
+					entries.sort((a, b) {
+						final ar = (_rssiEma[a.key]?.round()) ?? a.value.rssi;
+						final br = (_rssiEma[b.key]?.round()) ?? b.value.rssi;
+						return br.compareTo(ar);
+					});
+					_orderIds
+						..clear()
+						..addAll(entries.map((e) => e.key));
+				} else {
+					_expandedId = id;
+					if (_orderIds.isEmpty) _orderIds.addAll(_latest.keys);
+					_orderIds.remove(id);
+					_orderIds.insert(0, id);
+				}
+			});
+		}
+		
     bool _isSaved(String id) => _saved.containsKey(id);
 
     Future<void> _toggleSaved({required String id, required String? name}) async {
@@ -586,9 +590,6 @@ Future<void> _requestPermissions() async {
         savedAtMs: DateTime.now().millisecondsSinceEpoch,
       );
     }
-
-    // Haptic: subtle, consistent
-    HapticFeedback.heavyImpact();
 
     setState(() => _saved = next);
     await SavedStore.save(next);
@@ -606,366 +607,252 @@ Future<void> _requestPermissions() async {
     );
 
     final visibleIds = <String>{
-  ..._orderIds,
-  ..._saved.keys,
-}.toList();
-final now = DateTime.now().millisecondsSinceEpoch;
-final visibleResults = <String, ScanResult?>{};
-for (final id in visibleIds) {
-  final r = _latest[id];
+			..._orderIds,
+			..._saved.keys,
+		}.toList();
+		final now = DateTime.now().millisecondsSinceEpoch;
+		final visibleResults = <String, ScanResult?>{};
+		for (final id in visibleIds) {
+			final r = _latest[id];
 
-  if (isScanning && _isDead(id, now) && !_saved.containsKey(id)) {
-    _dropDevice(id);
-    continue;
-  }
+			if (isScanning && _isDead(id, now) && !_saved.containsKey(id)) {
+				_dropDevice(id);
+				continue;
+			}
 
-  // r null olabilir (scan görmedi), ama saved ise yine de listede kalacak
-  if (r != null || _saved.containsKey(id)) {
-    visibleResults[id] = r;
-  }
-}
-
-	final sortedIds = visibleResults.keys.toList()
-	 ..sort((a, b) {
-		final aSaved = _saved.containsKey(a);
-		final bSaved = _saved.containsKey(b);
-
-		// 1️⃣ Saved üstte
-		if (aSaved != bSaved) {
-		return aSaved ? -1 : 1;
+			// r null olabilir (scan görmedi), ama saved ise yine de listede kalacak
+			if (r != null || _saved.containsKey(id)) {
+				visibleResults[id] = r;
+			}
 		}
 
-		// 2️⃣ RSSI varsa güçlü olan üste
-		final aRssi = visibleResults[a]?.rssi ?? -999;
-		final bRssi = visibleResults[b]?.rssi ?? -999;
+		final sortedIds = visibleResults.keys.toList()
+		 ..sort((a, b) {
+			final aSaved = _saved.containsKey(a);
+			final bSaved = _saved.containsKey(b);
 
-		return bRssi.compareTo(aRssi);
-	});
+			// 1 Saved üstte
+			if (aSaved != bSaved) {
+			return aSaved ? -1 : 1;
+			}
+
+			// 2️ RSSI varsa güçlü olan üste
+			final aRssi = visibleResults[a]?.rssi ?? -999;
+			final bRssi = visibleResults[b]?.rssi ?? -999;
+
+			return bRssi.compareTo(aRssi);
+		});
 	
-	final savedIds = sortedIds.where((id) => _saved.containsKey(id)).toList();
-	final nearbyIds = sortedIds.where((id) => !_saved.containsKey(id)).toList();	
-	final limitedNearbyIds = _isPremium
+		final savedIds = sortedIds.where((id) => _saved.containsKey(id)).toList();
+		final nearbyIds = sortedIds.where((id) => !_saved.containsKey(id)).toList();	
+		final limitedNearbyIds = _isPremium
     ? nearbyIds
     : nearbyIds.take(2).toList();
-return Scaffold(
-  body: Stack(
-    children: [
-      // 1. KATMAN: Arka Plan Gradient
-      Positioned.fill(
-        child: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFF081018),
-                Color(0xFF081A24),
-                Color(0xFF070E14),
-              ],
-            ),
-          ),
-        ),
-      ),
+			return Scaffold(
+				body: Stack(
+					children: [
+						// 1. KATMAN: Arka Plan Gradient
+						Positioned.fill(
+							child: Container(
+								decoration: const BoxDecoration(
+									gradient: LinearGradient(
+										begin: Alignment.topCenter,
+										end: Alignment.bottomCenter,
+										colors: [
+											Color(0xFF081018),
+											Color(0xFF081A24),
+											Color(0xFF070E14),
+										],
+									),
+								),
+							),
+						),
 
-      // 2. KATMAN: App Icon (Logo) Arka Planı
-      // Radar efektinin hemen arkasında, çok hafif şeffaflıkla
-      Positioned.fill(
-        child: Center(
-          child: Opacity(
-  // 0.05 - 0.20 arası senin ekranına göre ayarla
-  // 0.15 genellikle "premium" bir derinlik verir
-  opacity: 0.15, 
-  child: Image.asset(
-    'assets/app_icon.png',
-    // Ekranın %85'ini kaplasın ki heybetli dursun
-    width: MediaQuery.of(context).size.width * 0.85,
-    fit: BoxFit.contain,
-    // RENK FİLTRESİNİ SİLDİK, ARTIK SAF HALİYLE GELİYOR
-  ),
-),
-        ),
-      ),
+					// 2. KATMAN: App Icon (Logo) Arka Planı
+					// Radar efektinin hemen arkasında, çok hafif şeffaflıkla
+					Positioned.fill(
+						child: Center(
+							child: Opacity(
+								// 0.05 - 0.20 arası senin ekranına göre ayarla
+								// 0.15 genellikle "premium" bir derinlik verir
+								opacity: 0.15, 
+								child: Image.asset(
+									'assets/app_icon.png',
+									// Ekranın %85'ini kaplasın ki heybetli dursun
+									width: MediaQuery.of(context).size.width * 0.85,
+									fit: BoxFit.contain,
+									// RENK FİLTRESİNİ SİLDİK, ARTIK SAF HALİYLE GELİYOR
+								),
+							),
+						),
+					),
 
-      // 3. KATMAN: Ambient radar background while scanning
-      Positioned.fill(
-        child: IgnorePointer(
-          child: AnimatedOpacity(
-            opacity: isScanning ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 250),
-            child: AnimatedBuilder(
-              animation: Listenable.merge([_sweepCtrl, _pulseCtrl]),
-              builder: (context, _) {
-                return CustomPaint(
-                  painter: FullScreenRadarPainter(
-                    sweepT: _sweepCtrl.value,
-                    pulseT: _pulseCtrl.value,
-                    label: '', // Boş label
-                  ),
-                );
-              },
-            ),
-          ),
-        ),
-      ),
+					// 3. KATMAN: Ambient radar background while scanning
+					Positioned.fill(
+						child: IgnorePointer(
+							child: AnimatedOpacity(
+								opacity: isScanning ? 1.0 : 0.0,
+								duration: const Duration(milliseconds: 250),
+								child: AnimatedBuilder(
+									animation: Listenable.merge([_sweepCtrl, _pulseCtrl]),
+									builder: (context, _) {
+										return CustomPaint(
+											painter: FullScreenRadarPainter(
+												sweepT: _sweepCtrl.value,
+												pulseT: _pulseCtrl.value,
+												label: '', // Boş label
+											),
+										);
+									},
+								),
+							),
+						),
+					),
 
-      // 4. KATMAN: Ana İçerik
-      SafeArea(
-        child: Column(
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-              child: HeaderPlayful(
-                isScanning: isScanning,
-                deviceCount: visibleResults.length,
-              ),
-            ),
+					// 4. KATMAN: Ana İçerik
+					SafeArea(
+						child: Column(
+							children: [
+								// Header
+								Padding(
+									padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+									child: HeaderPlayful(
+										isScanning: isScanning,
+										deviceCount: visibleResults.length,
+									),
+								),
 
-            // Scan Button Panel
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: ScanPanelPlayful(
-                isScanning: isScanning,
-                onToggle: _toggleScan,
-              ),
-            ),
-            
-            const SizedBox(height: 6),
+								// Scan Button Panel
+								Padding(
+									padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+									child: ScanPanelPlayful(
+										isScanning: isScanning,
+										onToggle: _toggleScan,
+									),
+								),
+								
+								const SizedBox(height: 6),
 
-            // Info Row
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text("Tap for details", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                  const SizedBox(width: 8),
-                  Text("•", style: TextStyle(color: Colors.white.withValues(alpha: 0.35))),
-                  const SizedBox(width: 8),
-                  const Text("Hold to find", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
+								// Info Row
+								Padding(
+									padding: const EdgeInsets.symmetric(horizontal: 16),
+									child: Row(
+										mainAxisAlignment: MainAxisAlignment.center,
+										children: [
+											const Text("Tap for details", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+											const SizedBox(width: 8),
+											Text("•", style: TextStyle(color: Colors.white.withValues(alpha: 0.35))),
+											const SizedBox(width: 8),
+											const Text("Hold to find", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+										],
+									),
+								),
 
-            const SizedBox(height: 6),
+								const SizedBox(height: 6),
 
-            // Device List
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: visibleResults.isEmpty
-                    ? EmptyStatePlayful(isScanning: isScanning)
-                    : ListView(
-                        padding: const EdgeInsets.only(top: 6, bottom: 10),
-                        children: [
-                          if (savedIds.isNotEmpty) ...[
-                            const SectionHeader(title: "SAVED"),
-                            for (final id in savedIds)
-                              _buildDeviceCard(id, visibleResults[id], now),
-                          ],
-                          if (nearbyIds.isNotEmpty) ...[
-                            const SectionHeader(title: "NEARBY"),
-                            for (final id in limitedNearbyIds)
-                              _buildDeviceCard(id, visibleResults[id], now),
-                          ],
-                        ],
-                      ),
-              ),
-            ),
-						Padding(
-  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-  child: Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.08),
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(
-        color: Colors.white.withValues(alpha: 0.12),
-      ),
-    ),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            _isPremium
-                ? "Premium active • unlimited scan and devices"
-                : "Premium: unlimited scan and unlimited devices.",
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        if (!_isPremium)
-          ElevatedButton(
-            onPressed: _buy,
-            child: const Text("Upgrade"),
-          ),
-      ],
-    ),
-  ),
-),
-						
-          ],
-        ),
-      ),
-	if (_isExpired)
-      PaywallOverlay(
-        onPurchase: () {
-          // Ödeme tetiklenecek
-          print("Initiating Purchase: \$1.99");
-        },
-      ),  
-	  
-    ],
-  ),
-);
-
+								// Device List
+								Expanded(
+									child: Padding(
+										padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+										child: visibleResults.isEmpty
+												? EmptyStatePlayful(isScanning: isScanning)
+												: ListView(
+														padding: const EdgeInsets.only(top: 6, bottom: 10),
+														children: [
+															if (savedIds.isNotEmpty) ...[
+																const SectionHeader(title: "SAVED"),
+																for (final id in savedIds)
+																	_buildDeviceCard(id, visibleResults[id], now),
+															],
+															if (nearbyIds.isNotEmpty) ...[
+																const SectionHeader(title: "NEARBY"),
+																for (final id in limitedNearbyIds)
+																	_buildDeviceCard(id, visibleResults[id], now),
+															],
+														],
+													),
+									),
+								),
+								Padding(
+									padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+									child: Container(
+										padding: const EdgeInsets.all(14),
+										decoration: BoxDecoration(
+											color: Colors.white.withValues(alpha: 0.08),
+											borderRadius: BorderRadius.circular(18),
+											border: Border.all(
+												color: Colors.white.withValues(alpha: 0.12),
+											),
+										),
+										child: Row(
+											children: [
+												Expanded(
+													child: Text(
+														_isPremium
+																? "Premium active • unlimited scan and devices"
+																: "Premium: unlimited scan and unlimited devices.",
+														style: const TextStyle(
+															color: Colors.white70,
+															fontSize: 13,
+															fontWeight: FontWeight.w600,
+														),
+													),
+												),
+												const SizedBox(width: 12),
+												if (!_isPremium)
+													ElevatedButton(
+														onPressed: _buy,
+														child: const Text("Upgrade"),
+													),
+											],
+										),
+									),
+								),
+							],
+						),
+					),
+				],
+			),
+		);
   }
 	
-Future<void> _testIap() async {
-  final bool available = await InAppPurchase.instance.isAvailable();
-  print("IAP available: $available");
+	Future<void> _testIap() async {
+		final bool available = await InAppPurchase.instance.isAvailable();
+		print("IAP available: $available");
 
-  const ids = <String>{'premium_unlock'};
-  final response = await InAppPurchase.instance.queryProductDetails(ids);
+		const ids = <String>{'premium_unlock'};
+		final response = await InAppPurchase.instance.queryProductDetails(ids);
 
-  print("Found products: ${response.productDetails.length}");
-  for (var p in response.productDetails) {
-    print("Product: ${p.id} - ${p.price}");
-  }
+		print("Found products: ${response.productDetails.length}");
+		for (var p in response.productDetails) {
+			print("Product: ${p.id} - ${p.price}");
+		}
 
-  if (response.notFoundIDs.isNotEmpty) {
-    print("Not found: ${response.notFoundIDs}");
-  }
-}	
+		if (response.notFoundIDs.isNotEmpty) {
+			print("Not found: ${response.notFoundIDs}");
+		}
+	}	
 
-Future<void> _buy() async {
-  const ids = <String>{'premium_unlock'};
-  final response = await InAppPurchase.instance.queryProductDetails(ids);
+	Future<void> _buy() async {
+		const ids = <String>{'premium_unlock'};
+		final response = await InAppPurchase.instance.queryProductDetails(ids);
 
-  if (response.productDetails.isEmpty) {
-    print("Product not found");
-    return;
-  }
+		if (response.productDetails.isEmpty) {
+			print("Product not found");
+			return;
+		}
 
-  final product = response.productDetails.first;
+		final product = response.productDetails.first;
 
-  final purchaseParam = PurchaseParam(productDetails: product);
+		final purchaseParam = PurchaseParam(productDetails: product);
 
-  await InAppPurchase.instance.buyNonConsumable(
-    purchaseParam: purchaseParam,
-  );
-}
-Future<void> _restorePurchases() async {
+		await InAppPurchase.instance.buyNonConsumable(
+			purchaseParam: purchaseParam,
+		);
+	}
+	Future<void> _restorePurchases() async {
   await InAppPurchase.instance.restorePurchases();
-}
+	}
 	
 }
 
-// 'const' kelimesini sildik
-class PaywallOverlay extends StatelessWidget {
-  final VoidCallback onPurchase; // Bu zaten varmış
-
-  PaywallOverlay({super.key, required this.onPurchase}); // const kaldırıldı
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: BackdropFilter(
-        // Arkayı tam kıvamında bulandırıyoruz (Rakamlar okunmasın ama hareket görünsün)
-        filter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
-        child: Container(
-          color: const Color(0xFF081018).withOpacity(0.88), // Senin o derin koyu tonun
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Ghost Logo (Kilit ikonuyla desteklenmiş)
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  Opacity(
-                    opacity: 0.1,
-                    child: Image.asset('assets/app_icon.png', width: 200),
-                  ),
-                  const Icon(Icons.lock_outline, color: Colors.white24, size: 80),
-                ],
-              ),
-              const SizedBox(height: 30),
-              const Text(
-                "TRIAL EXPIRED",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 4,
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-                child: Text(
-                  "Trial Period Ended. Unlock lifetime access to keep tracking and finding your devices without limits.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
-                ),
-              ),
-              const SizedBox(height: 25),
-              // O meşhur 1.99$ Butonu
-              ElevatedButton(
-				  style: ElevatedButton.styleFrom(
-					padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-				  ),
-				  // home_page.dart içindeki o butonu bul ve onPressed kısmını şöyle güncelle:
-onPressed: () async {
-  /*try {
-    print("Satın alma başlatılıyor...");
-    //Offerings offerings = await Purchases.getOfferings();
-    
-    Package? packageToBuy;
-
-    // 1. Önce 'current' içindeki paketi dene
-    if (offerings.current != null && offerings.current!.availablePackages.isNotEmpty) {
-      packageToBuy = offerings.current!.availablePackages.first;
-      print("Current paketi seçildi: ${packageToBuy.identifier}");
-    } 
-    // 2. Eğer current boşsa, eldeki tüm tekliflerin içine bak (Zorla bulma)
-    else if (offerings.all.isNotEmpty) {
-      print("Current boş, tüm listeyi tarıyorum...");
-      for (var offering in offerings.all.values) {
-        if (offering.availablePackages.isNotEmpty) {
-          packageToBuy = offering.availablePackages.first;
-          print("Alternatif paket bulundu: ${packageToBuy.identifier}");
-          break;
-        }
-      }
-    }
-
-    if (packageToBuy != null) {
-      print("Google Play penceresi açılıyor...");
-      //var result = await Purchases.purchasePackage(packageToBuy);
-      
-      if (result.customerInfo.entitlements.all["pro"]?.isActive ?? false) {
-        onPurchase();
-        if (context.mounted) Navigator.pop(context);
-      }
-    } else {
-      print("HATA: RevenueCat'te hiçbir paket bulunamadı! Panelden 'Packages' kısmını kontrol et.");
-    }
-  } catch (e) {
-    print("Hata veya İptal: $e");
-  }*/
-},
-				  child: const Text(
-					"Unlock Lifetime Access - \$1.99",
-					style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-				  ),
-				),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

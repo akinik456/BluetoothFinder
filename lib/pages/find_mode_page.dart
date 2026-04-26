@@ -11,7 +11,6 @@ import 'package:flutter/services.dart';
 
 import '../core/app_settings.dart';
 import '../services/audio_service.dart';
-import '../services/trial_service.dart';
 
 import '../widgets/radar_painter.dart';
 import '../widgets/custom_components.dart';
@@ -66,7 +65,6 @@ class _FindModePageState extends State<FindModePage>
 
 int _beepGen = 0; // kill-switch jenerasyonu
 bool _beepEnabled = true;
-bool _isExpired = false; 
 
   @override
   void initState() {
@@ -522,13 +520,6 @@ Widget build(BuildContext context) {
             ),
           ),
         ),
-		if (_isExpired)
-      PaywallOverlay(
-        onPurchase: () {
-          // Ödeme tetiklenecek
-          print("Initiating Purchase: \$1.99");
-        },
-      ),
       ],
     ),
 	
@@ -536,107 +527,3 @@ Widget build(BuildContext context) {
 }
 }
 
-class PaywallOverlay extends StatelessWidget {
-  final VoidCallback onPurchase;
-
-  const PaywallOverlay({super.key, required this.onPurchase});
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: BackdropFilter(
-        // Arkayı tam kıvamında bulandırıyoruz (Rakamlar okunmasın ama hareket görünsün)
-        filter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
-        child: Container(
-          color: const Color(0xFF081018).withOpacity(0.88), // Senin o derin koyu tonun
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Ghost Logo (Kilit ikonuyla desteklenmiş)
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  Opacity(
-                    opacity: 0.1,
-                    child: Image.asset('assets/app_icon.png', width: 200),
-                  ),
-                  const Icon(Icons.lock_outline, color: Colors.white24, size: 80),
-                ],
-              ),
-              const SizedBox(height: 30),
-              const Text(
-                "TRIAL EXPIRED",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 4,
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-                child: Text(
-                  "Trial Period Ended. Unlock lifetime access to keep tracking and finding your devices without limits.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
-                ),
-              ),
-              const SizedBox(height: 25),
-              // O meşhur 1.99$ Butonu
-			  
-              ElevatedButton(
-				  style: ElevatedButton.styleFrom(
-					padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-				  ),
-				  onPressed: () async {
-  /*try {
-    print("Satın alma başlatılıyor...");
-    //Offerings offerings = await Purchases.getOfferings();
-    
-    Package? packageToBuy;
-
-    // 1. Önce 'current' içindeki paketi dene
-    if (offerings.current != null && offerings.current!.availablePackages.isNotEmpty) {
-      packageToBuy = offerings.current!.availablePackages.first;
-      print("Current paketi seçildi: ${packageToBuy.identifier}");
-    } 
-    // 2. Eğer current boşsa, eldeki tüm tekliflerin içine bak (Zorla bulma)
-    else if (offerings.all.isNotEmpty) {
-      print("Current boş, tüm listeyi tarıyorum...");
-      for (var offering in offerings.all.values) {
-        if (offering.availablePackages.isNotEmpty) {
-          packageToBuy = offering.availablePackages.first;
-          print("Alternatif paket bulundu: ${packageToBuy.identifier}");
-          break;
-        }
-      }
-    }
-
-    if (packageToBuy != null) {
-      print("Google Play penceresi açılıyor...");
-      //var result = await Purchases.purchasePackage(packageToBuy);
-      
-      if (result.customerInfo.entitlements.all["pro"]?.isActive ?? false) {
-        onPurchase();
-        if (context.mounted) Navigator.pop(context);
-      }
-    } else {
-      print("HATA: RevenueCat'te hiçbir paket bulunamadı! Panelden 'Packages' kısmını kontrol et.");
-    }
-  } catch (e) {
-    print("Hata veya İptal: $e");
-  }*/
-},
-				  child: const Text(
-					"Unlock Lifetime Access - \$1.99",
-					style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-				  ),
-				),
-			  
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
