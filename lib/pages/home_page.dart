@@ -73,11 +73,15 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
 
     if (purchase.status == PurchaseStatus.purchased ||
         purchase.status == PurchaseStatus.restored) {
-	await PremiumStore.setPremium(true);
+				await PremiumStore.setPremium(true);
       //print("PURCHASE OK: ${purchase.productID}");
-			setState(() {
-  _isPremium = true;
-});
+			
+			if (mounted) {
+				setState(() {
+					_isPremium = true;
+				});
+			}
+			
     }
 
     if (purchase.pendingCompletePurchase) {
@@ -200,22 +204,27 @@ unawaited(_restorePurchases());
     //print("WATCHDOG: recovery done");
   },
 );
+Future.delayed(const Duration(seconds: 1), () {
+  if (mounted) setState(() {});
+});
   }
+	
+	
   
   Future<void> _checkStatus() async {
   final cached = await PremiumStore.getPremium();
-if (cached) {
-  setState(() {
-    _isPremium = true;
-  });
-}
+	if (cached && mounted) {
+		setState(() {
+			_isPremium = true;
+		});
+	}
 }
   Future<void> _loadSaved() async {
     final loaded = await SavedStore.load();
     if (!mounted) return;
     setState(() => _saved = loaded);
   }  
-  
+
 
   @override
   void dispose() {
