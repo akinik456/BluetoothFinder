@@ -1,0 +1,68 @@
+Merhaba 👋
+
+Uygulamanın test sürümüne katılman gerekiyor. Lütfen adımları aynen takip et:
+
+1) Aşağıdaki linke tıkla:
+[TEST LİNKİNİ BURAYA KOY]
+
+2) Açılan sayfada “Katıl” (Join) butonuna bas
+
+3) Play Store açılacak → uygulamayı BURADAN indir
+(Play Store’da aratarak indirme ❌)
+
+4) Uygulamayı aç ve test et
+
+💳 Satın alma testleri:
+- Gerçek para çekilmez
+- “Test purchase” ibaresi görmelisin
+- Eğer gerçek ödeme ekranı çıkarsa işlemi iptal et ve bana yaz
+
+⚠️ Önemli:
+- Play Store’da giriş yaptığın Gmail adresi test için eklenmiş olmalı
+- Farklı hesapla girersen test çalışmaz
+
+Teşekkürler 🙏
+
+************************
+hangi tester:
+- app açtı mı
+- scan başlattı mı
+- upgrade'e bastı mı
+- satın alma yaptı mı
+
+Adım 1 — cihaz kimliği gibi davranan tag
+
+State içine:
+
+final String _sessionId = DateTime.now().millisecondsSinceEpoch.toString();
+🎯 Adım 2 — log helper
+void logEvent(String event) {
+  print("LOG [$ _sessionId ] $event");
+}
+
+Adım 3 — kritik yerlere koy
+App açılış:
+logEvent("app_open");
+
+Scan start:
+logEvent("scan_start");
+Scan stop:
+logEvent("scan_stop");
+Upgrade tık:
+logEvent("upgrade_click");
+Purchase success:
+logEvent("purchase_success");
+🎯 Tester’dan ne isteyeceksin?
+adb logcat | findstr LOG
+
+veya:
+
+👉 sadece ekran görüntüsü atsın
+
+🔥 Bonus (çok işe yarar)
+
+👉 cihaz adı da ekle:
+
+logEvent("device=${widget.deviceId}");
+
+

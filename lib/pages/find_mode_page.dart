@@ -142,7 +142,7 @@ BeepGuard.killNow();
   final now = DateTime.now().millisecondsSinceEpoch;
   
   for (final r in results) {
-  print("SCAN -> ${r.device.remoteId.str} | target=${widget.deviceId}");
+  //print("SCAN -> ${r.device.remoteId.str} | target=${widget.deviceId}");
     final id = r.device.remoteId.str;
     if (id != widget.deviceId) continue;
 
@@ -210,7 +210,7 @@ BeepGuard.killNow();
         final int g = BeepGuard.gen;
 
 
-print("BEEP TRY enabled=${BeepGuard.enabled} gen=${BeepGuard.gen} ready=$_audioReady mute=${globalMute.value}");
+//print("BEEP TRY enabled=${BeepGuard.enabled} gen=${BeepGuard.gen} ready=$_audioReady mute=${globalMute.value}");
 if (!BeepGuard.enabled || globalMute.value || !_audioReady) return;
 
 // Home/kilit tam arada geldiyse düşür

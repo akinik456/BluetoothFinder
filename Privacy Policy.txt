@@ -1,0 +1,25 @@
+Privacy Policy
+
+FindLostGadget does not collect, store, or share any personal data from users.
+
+Bluetooth & Location Permissions
+This app requires Bluetooth and Location permissions solely to scan nearby Bluetooth devices and estimate their distance. Location data is never collected, stored, or transmitted.
+
+Data Collection
+FindLostGadget does not collect any personal information, analytics data, or usage data.
+
+Data Sharing
+No user data is shared with third parties.
+
+In-App Purchases
+The app offers a one-time premium purchase to unlock additional features. All payments are securely processed by Google Play. The app does not store or access any payment information.
+
+Security
+Since no personal data is collected or stored, there is no risk of data exposure from the app itself.
+
+Changes
+This privacy policy may be updated in the future. Any changes will be reflected on this page.
+
+Contact
+If you have any questions, you can contact us at:
+lynra.dev@gmail.com

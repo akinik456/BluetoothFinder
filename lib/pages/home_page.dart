@@ -8,6 +8,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:bluetoothfinder/core/scan_watchdog.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 
 import '../core/app_settings.dart';
 import '../services/storage_service.dart';
@@ -68,12 +69,12 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
     super.initState();
 		_purchaseSub = InAppPurchase.instance.purchaseStream.listen((purchases) async {
 	for (final purchase in purchases) {
-    print("PURCHASE STATUS: ${purchase.status}");
+    //print("PURCHASE STATUS: ${purchase.status}");
 
     if (purchase.status == PurchaseStatus.purchased ||
         purchase.status == PurchaseStatus.restored) {
 	await PremiumStore.setPremium(true);
-      print("PURCHASE OK: ${purchase.productID}");
+      //print("PURCHASE OK: ${purchase.productID}");
 			setState(() {
   _isPremium = true;
 });
@@ -192,11 +193,11 @@ unawaited(_restorePurchases());
   onRecover: () async {
     if (!_isPremium) return;
 
-    print("WATCHDOG: recovery start");
+    //print("WATCHDOG: recovery start");
     await _stopScan();
     await Future.delayed(const Duration(milliseconds: 800));
     await _startScan();
-    print("WATCHDOG: recovery done");
+    //print("WATCHDOG: recovery done");
   },
 );
   }
@@ -405,7 +406,7 @@ Future<void> _requestPermissions() async {
 
   // 2. ADIM: Eğer her iki izin de zaten verilmişse (granted), fonksiyonu burada bitir
   if (bluetoothStatus.isGranted && locationStatus.isGranted) {
-    print("İzinler zaten tam, diyalog tetiklenmiyor.");
+    //print("İzinler zaten tam, diyalog tetiklenmiyor.");
     return; 
   }
 
@@ -458,6 +459,26 @@ Future<void> _requestPermissions() async {
   }  
 
   Future<void> _startScan() async {
+final deviceInfo = DeviceInfoPlugin();
+final androidInfo = await deviceInfo.androidInfo;
+final sdk = androidInfo.version.sdkInt;
+
+if (sdk <= 30) {
+  final serviceEnabled = await Permission.location.serviceStatus.isEnabled;
+
+  if (!serviceEnabled) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Konum servisini açmadan tarama yapılamaz"),
+      ),
+    );
+    return;
+  }
+}
+	
+	
+	
+	
   if (_isPremium) {
   _watchdog.resetSession();
   _watchdog.start();
@@ -528,7 +549,7 @@ Future<void> _requestPermissions() async {
     if (!isScanning) {
 
       if (!mounted) return;
-      
+
       await _startScan();
 
     } else {
@@ -640,29 +661,32 @@ Future<void> _requestPermissions() async {
 			}
 		}
 
-		final sortedIds = visibleResults.keys.toList()
-		 ..sort((a, b) {
-			final aSaved = _saved.containsKey(a);
-			final bSaved = _saved.containsKey(b);
+		final sortedIds = visibleResults.keys.toList();
 
-			// 1 Saved üstte
-			if (aSaved != bSaved) {
-			return aSaved ? -1 : 1;
-			}
+if (_expandedId == null) {
+  sortedIds.sort((a, b) {
+    final aSaved = _saved.containsKey(a);
+    final bSaved = _saved.containsKey(b);
 
-			// 2️ RSSI varsa güçlü olan üste
-			final aRssi = visibleResults[a]?.rssi ?? -999;
-			final bRssi = visibleResults[b]?.rssi ?? -999;
+    // 1 Saved üstte
+    if (aSaved != bSaved) {
+      return aSaved ? -1 : 1;
+    }
 
-			return bRssi.compareTo(aRssi);
-		});
-	
-		final savedIds = sortedIds.where((id) => _saved.containsKey(id)).toList();
-		final nearbyIds = sortedIds.where((id) => !_saved.containsKey(id)).toList();	
-		final limitedNearbyIds = _isPremium
+    // 2 RSSI varsa güçlü olan üste
+    final aRssi = visibleResults[a]?.rssi ?? -999;
+    final bRssi = visibleResults[b]?.rssi ?? -999;
+
+    return bRssi.compareTo(aRssi);
+  });
+}
+
+final savedIds = sortedIds.where((id) => _saved.containsKey(id)).toList();
+final nearbyIds = sortedIds.where((id) => !_saved.containsKey(id)).toList();
+final limitedNearbyIds = _isPremium
     ? nearbyIds
     : nearbyIds.take(2).toList();
-			return Scaffold(
+		return Scaffold(
 				body: Stack(
 					children: [
 						// 1. KATMAN: Arka Plan Gradient
@@ -832,18 +856,18 @@ Future<void> _requestPermissions() async {
 	
 	Future<void> _testIap() async {
 		final bool available = await InAppPurchase.instance.isAvailable();
-		print("IAP available: $available");
+		//print("IAP available: $available");
 
 		const ids = <String>{'premium_unlock'};
 		final response = await InAppPurchase.instance.queryProductDetails(ids);
 
-		print("Found products: ${response.productDetails.length}");
+		//print("Found products: ${response.productDetails.length}");
 		for (var p in response.productDetails) {
-			print("Product: ${p.id} - ${p.price}");
+			//print("Product: ${p.id} - ${p.price}");
 		}
 
 		if (response.notFoundIDs.isNotEmpty) {
-			print("Not found: ${response.notFoundIDs}");
+			//print("Not found: ${response.notFoundIDs}");
 		}
 	}	
 
@@ -852,7 +876,7 @@ Future<void> _requestPermissions() async {
 		final response = await InAppPurchase.instance.queryProductDetails(ids);
 
 		if (response.productDetails.isEmpty) {
-			print("Product not found");
+			//print("Product not found");
 			return;
 		}
 
