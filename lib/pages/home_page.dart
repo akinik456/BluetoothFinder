@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:bluetoothfinder/core/scan_watchdog.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/app_settings.dart';
 import '../services/storage_service.dart';
@@ -41,7 +42,9 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
 	
 	StreamSubscription<List<PurchaseDetails>>? _purchaseSub;
 	bool _isPremium = false;
-
+	bool _trialActive = false;
+	bool get _hasFullAccess => _isPremium || _trialActive;
+	
   StreamSubscription<List<ScanResult>>? _scanSub;
   StreamSubscription<bool>? _isScanningSub;
 	StreamSubscription<BluetoothAdapterState>? _adapterStateSub;
@@ -63,6 +66,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
   Map<String, SavedDevice> _saved = {};  
 
   final Set<String> _seenThisSession = <String>{};
+	
 
 @override
   void initState() {
@@ -187,6 +191,7 @@ unawaited(_restorePurchases());
     });
 	
   unawaited(_loadSaved());	
+	unawaited(_initTrial());
   
   // Play Store kuralı: Açılışta bilgilendirip izin iste
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -208,7 +213,28 @@ Future.delayed(const Duration(seconds: 1), () {
   if (mounted) setState(() {});
 });
   }
-	
+Future<void> _initTrial() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  const key = 'trialStartMs';
+  final now = DateTime.now().millisecondsSinceEpoch;
+
+  int start = prefs.getInt(key) ?? 0;
+
+  if (start == 0) {
+    start = now;
+    await prefs.setInt(key, start);
+  }
+
+  const trialDurationMs = 15 * 24 * 60 * 60 * 1000; // 15 gün
+
+  final active = (now - start) < trialDurationMs;
+
+  if (!mounted) return;
+  setState(() {
+    _trialActive = active;
+  });
+}	
 	
   
   Future<void> _checkStatus() async {
@@ -468,34 +494,27 @@ Future<void> _requestPermissions() async {
   }  
 
   Future<void> _startScan() async {
-final deviceInfo = DeviceInfoPlugin();
-final androidInfo = await deviceInfo.androidInfo;
-final sdk = androidInfo.version.sdkInt;
-
-if (sdk <= 30) {
-  final serviceEnabled = await Permission.location.serviceStatus.isEnabled;
-
-  if (!serviceEnabled) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Konum servisini açmadan tarama yapılamaz"),
-      ),
-    );
-    return;
-  }
-}
-	
-	
-	
-	
-  if (_isPremium) {
-  _watchdog.resetSession();
-  _watchdog.start();
-}
+	final deviceInfo = DeviceInfoPlugin();
+	final androidInfo = await deviceInfo.androidInfo;
+	final sdk = androidInfo.version.sdkInt;
+	if (sdk <= 30) {
+		final serviceEnabled = await Permission.location.serviceStatus.isEnabled;
+		if (!serviceEnabled) {
+			ScaffoldMessenger.of(context).showSnackBar(
+				const SnackBar(
+					content: Text("Konum servisini açmadan tarama yapılamaz"),
+				),
+			);
+			return;
+		}
+	}	
+		if (_hasFullAccess) {
+		_watchdog.resetSession();
+		_watchdog.start();
+	}
   BeepGuard.arm();
     await _ensurePermissions();
 	if (!mounted) return;
-
     // Ensure Bluetooth is ON (Android can prompt via system dialog)
     if (Platform.isAndroid) {
       final st = FlutterBluePlus.adapterStateNow;
@@ -505,7 +524,6 @@ if (sdk <= 30) {
         } catch (_) {
           // ignore; we'll verify state below
         }
-
         // wait a bit for adapter to fully turn on
         try {
           await FlutterBluePlus.adapterState
@@ -523,20 +541,20 @@ if (sdk <= 30) {
         throw Exception("Bluetooth is OFF");
       }
     }
-
     _latest.clear();
     _lastSeenMs.clear();
     _rssiEma.clear();
     _orderIds.clear();
     _expandedId = null;
-
-    await FlutterBluePlus.startScan(
-      continuousUpdates: true,
-      continuousDivisor: 1,
-      androidScanMode: AndroidScanMode.lowLatency,
-    );
+		await FlutterBluePlus.stopScan();
+		await Future.delayed(const Duration(milliseconds: 300));
+		await FlutterBluePlus.startScan(
+			continuousUpdates: true,
+			continuousDivisor: 1,
+			androidScanMode: AndroidScanMode.lowLatency,
+		);		
 		Future.delayed(const Duration(seconds: 15), () async {
-			if (isScanning && !_isPremium) {
+			if (isScanning && !_hasFullAccess) {
 			await _stopScan();
 			}
 		});
@@ -692,7 +710,7 @@ if (_expandedId == null) {
 
 final savedIds = sortedIds.where((id) => _saved.containsKey(id)).toList();
 final nearbyIds = sortedIds.where((id) => !_saved.containsKey(id)).toList();
-final limitedNearbyIds = _isPremium
+final limitedNearbyIds = _hasFullAccess
     ? nearbyIds
     : nearbyIds.take(2).toList();
 		return Scaffold(
