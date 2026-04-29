@@ -10,6 +10,8 @@ import 'package:bluetoothfinder/core/scan_watchdog.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:in_app_update/in_app_update.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../core/app_settings.dart';
 import '../services/storage_service.dart';
@@ -44,6 +46,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
 	bool _isPremium = false;
 	bool _trialActive = false;
 	bool get _hasFullAccess => _isPremium || _trialActive;
+	int _trialDaysLeft = 0;
 	
   StreamSubscription<List<ScanResult>>? _scanSub;
   StreamSubscription<bool>? _isScanningSub;
@@ -66,7 +69,7 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
   Map<String, SavedDevice> _saved = {};  
 
   final Set<String> _seenThisSession = <String>{};
-	
+	String _appVersion = '';
 
 @override
   void initState() {
@@ -192,6 +195,8 @@ unawaited(_restorePurchases());
 	
   unawaited(_loadSaved());	
 	unawaited(_initTrial());
+	unawaited(_loadVersion());
+	unawaited(_checkForUpdate());
   
   // Play Store kuralı: Açılışta bilgilendirip izin iste
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -226,16 +231,72 @@ Future<void> _initTrial() async {
     await prefs.setInt(key, start);
   }
 
-  const trialDurationMs = 15 * 24 * 60 * 60 * 1000; // 15 gün
+  const trialDurationMs = 15 * 24 * 60 * 60 * 1000;//15 * 24 * 60 * 60 * 1000; // 15 gün
 
   final active = (now - start) < trialDurationMs;
-
+	final remainingMs = trialDurationMs - (now - start);
+  final daysLeft = (remainingMs / (24 * 60 * 60 * 1000)).ceil();
+	
   if (!mounted) return;
   setState(() {
     _trialActive = active;
+		_trialDaysLeft = active ? daysLeft : 0;
   });
 }	
-	
+
+Future<void> _checkForUpdate() async {
+  try {
+    final info = await InAppUpdate.checkForUpdate();
+
+    if (!mounted) return;
+
+    if (info.updateAvailability == UpdateAvailability.updateAvailable &&
+        info.flexibleUpdateAllowed) {
+      _showUpdateDialog();
+    }
+  } catch (_) {
+    // Debug APK, sideload veya Play Store dışı kurulumda hata verebilir.
+    // Sessiz geçiyoruz.
+  }
+}
+void _showUpdateDialog() {
+  showDialog(
+    context: context,
+    barrierDismissible: true,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text("Update Available"),
+        content: const Text(
+          "A new version is available. Update now for the best experience.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("LATER"),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              try {
+                await InAppUpdate.startFlexibleUpdate();
+                await InAppUpdate.completeFlexibleUpdate();
+              } catch (_) {}
+            },
+            child: const Text("UPDATE"),
+          ),
+        ],
+      );
+    },
+  );
+}
+Future<void> _loadVersion() async {
+  final info = await PackageInfo.fromPlatform();
+
+  if (!mounted) return;
+  setState(() {
+    _appVersion = "${info.version}+${info.buildNumber}";
+  });
+}	
   
   Future<void> _checkStatus() async {
   final cached = await PremiumStore.getPremium();
@@ -848,29 +909,47 @@ final limitedNearbyIds = _hasFullAccess
 											border: Border.all(
 												color: Colors.white.withValues(alpha: 0.12),
 											),
+											
 										),
 										child: Row(
-											children: [
-												Expanded(
-													child: Text(
-														_isPremium
-																? "Premium active • unlimited scan and devices"
-																: "Premium: unlimited scan and unlimited devices.",
-														style: const TextStyle(
-															color: Colors.white70,
-															fontSize: 13,
-															fontWeight: FontWeight.w600,
-														),
-													),
-												),
-												const SizedBox(width: 12),
-												if (!_isPremium)
-													ElevatedButton(
-														onPressed: _buy,
-														child: const Text("Upgrade"),
-													),
-											],
-										),
+  children: [
+    Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _isPremium
+						? "Premium active • unlimited scan and devices"
+						: (_trialActive
+    ? "Free trial • unlimited scan and devices • $_trialDaysLeft days left"
+    : "Free mode • limited scan and devices"),
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (_appVersion.isNotEmpty)
+            Text(
+              "Version $_appVersion",
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.4),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+        ],
+      ),
+    ),
+    const SizedBox(width: 12),
+    if (!_isPremium)
+      ElevatedButton(
+        onPressed: _buy,
+        child: const Text("Go Premium"),
+      ),
+  ],
+),
+										
 									),
 								),
 							],
