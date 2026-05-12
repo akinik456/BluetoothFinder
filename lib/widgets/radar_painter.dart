@@ -23,7 +23,7 @@ class FullScreenRadarPainter extends CustomPainter {
   });
   @override
   void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width * 0.5, size.height * 0.42);
+    final c = Offset(size.width * 0.5, size.height * 0.49);
     final r = math.min(size.width, size.height) * 0.62;
 
     const base = Color(0xFF35D0FF);

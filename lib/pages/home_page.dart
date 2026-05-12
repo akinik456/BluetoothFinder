@@ -205,13 +205,13 @@ unawaited(_restorePurchases());
 	_watchdog = ScanWatchdog(
   stallThreshold: const Duration(seconds: 20),
   onRecover: () async {
-    if (!_isPremium) return;
+    if (!_hasFullAccess) return;
 
-    //print("WATCHDOG: recovery start");
+    print("WATCHDOG: recovery start");
     await _stopScan();
-    await Future.delayed(const Duration(milliseconds: 800));
+    await Future.delayed(const Duration(milliseconds: 2000));
     await _startScan();
-    //print("WATCHDOG: recovery done");
+    print("WATCHDOG: recovery done");
   },
 );
 Future.delayed(const Duration(seconds: 1), () {
@@ -231,7 +231,7 @@ Future<void> _initTrial() async {
     await prefs.setInt(key, start);
   }
 
-  const trialDurationMs = 15 * 24 * 60 * 60 * 1000;//15 * 24 * 60 * 60 * 1000; // 15 gün
+  const trialDurationMs = 7 * 24 * 60 * 60 * 1000;//15 * 24 * 60 * 60 * 1000; // 15 gün
 
   final active = (now - start) < trialDurationMs;
 	final remainingMs = trialDurationMs - (now - start);
