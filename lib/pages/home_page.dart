@@ -12,6 +12,7 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:in_app_update/in_app_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/app_settings.dart';
 import '../services/storage_service.dart';
@@ -919,29 +920,71 @@ final limitedNearbyIds = _hasFullAccess
         children: [
           Text(
             _isPremium
-						? "Premium active • unlimited scan and devices"
-						: (_trialActive
-    ? "Free trial • unlimited scan and devices • $_trialDaysLeft days left"
-    : "Free mode • limited scan and devices"),
+                ? "Premium active • unlimited scan and devices"
+                : (_trialActive
+                    ? "Free trial • unlimited scan and devices • $_trialDaysLeft days left"
+                    : "Free mode • limited scan and devices"),
             style: const TextStyle(
               color: Colors.white70,
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
           ),
-          if (_appVersion.isNotEmpty)
-            Text(
-              "Version $_appVersion",
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.4),
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
+
+          const SizedBox(height: 2),
+
+          Row(
+            children: [
+              if (_appVersion.isNotEmpty)
+                Text(
+                  "Version $_appVersion",
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.4),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+
+              const SizedBox(width: 10),
+
+              InkWell(
+                onTap: () {
+                  openFeedbackMenu();
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        size: 13,
+                        color: const Color(0xFF8FD8FF).withOpacity(0.50),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        "Feedback",
+                        style: TextStyle(
+                          color: const Color(0xFF8FD8FF).withOpacity(0.50),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
+            ],
+          ),
         ],
       ),
     ),
+
     const SizedBox(width: 12),
+
     if (!_isPremium)
       ElevatedButton(
         onPressed: _buy,
@@ -998,5 +1041,135 @@ final limitedNearbyIds = _hasFullAccess
   await InAppPurchase.instance.restorePurchases();
 	}
 	
+void openFeedbackMenu() {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: const Color(0xFF111827),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(24),
+      ),
+    ),
+    builder: (context) {
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _FeedbackItem(
+                icon: Icons.star_rounded,
+                title: "Rate on Play Store",
+                onTap: () async {
+  Navigator.pop(context);
+
+  final Uri url = Uri.parse(
+    //"https://play.google.com/store/apps/details?id=com.akinik.findlostgadget",
+		
+		"https://play.google.com/store/apps/details?id=com.akinik.findlostgadget.app&pli=1",
+  );
+
+  await launchUrl(
+    url,
+    mode: LaunchMode.externalApplication,
+  );
+},
+              ),
+
+              const SizedBox(height: 12),
+
+              _FeedbackItem(
+                icon: Icons.mail_outline_rounded,
+                title: "Send Feedback",
+                onTap: () async {
+                  Navigator.pop(context);
+                  openFeedback();
+                },
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+	
+Future<void> openFeedback() async {
+	String _appVersion = '';
+	final infoapp = await PackageInfo.fromPlatform();
+	_appVersion = "${infoapp.version}+${infoapp.buildNumber}";
+	
+  final info = await DeviceInfoPlugin().androidInfo;
+
+
+  final body = '''
+Message:
+
+---
+
+App version: $_appVersion
+Android: ${info.version.release}
+Device: ${info.manufacturer} ${info.model}
+''';
+
+  final uri = Uri(
+    scheme: 'mailto',
+    path: 'lynra.dev@gmail.com',
+    queryParameters: {
+      'subject': 'Lynra FindLostGadget Feedback',
+      'body': body,
+    },
+  );
+
+  await launchUrl(uri);
+}	
+	
 }
 
+class _FeedbackItem extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final VoidCallback onTap;
+
+  const _FeedbackItem({
+    required this.icon,
+    required this.title,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.08),
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: const Color(0xFF8FD8FF).withOpacity(0.85),
+              size: 22,
+            ),
+            const SizedBox(width: 14),
+            Text(
+              title,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
