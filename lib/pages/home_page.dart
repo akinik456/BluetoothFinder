@@ -913,85 +913,127 @@ final limitedNearbyIds = _hasFullAccess
 											
 										),
 										child: Row(
-  children: [
-    Expanded(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _isPremium
-                ? "Premium active • unlimited scan and devices"
-                : (_trialActive
-                    ? "Free trial • unlimited scan and devices • $_trialDaysLeft days left"
-                    : "Free mode • limited scan and devices"),
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+											children: [
+												Expanded(
+													child: Column(
+	crossAxisAlignment: CrossAxisAlignment.start,
+	children: [
 
-          const SizedBox(height: 2),
+		Text(
+			_isPremium
+					? "Premium active • unlimited scan and devices"
+					: (_trialActive
+							? "Free trial • unlimited scan and devices • $_trialDaysLeft days left"
+							: "Free mode • limited scan and devices"),
+			style: const TextStyle(
+				color: Colors.white70,
+				fontSize: 13,
+				fontWeight: FontWeight.w600,
+			),
+		),
 
-          Row(
-            children: [
-              if (_appVersion.isNotEmpty)
-                Text(
-                  "Version $_appVersion",
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+		const SizedBox(height: 2),
 
-              const SizedBox(width: 10),
+		if (_appVersion.isNotEmpty)
+			Text(
+				"Version $_appVersion",
+				style: TextStyle(
+					color: Colors.white.withOpacity(0.4),
+					fontSize: 11,
+					fontWeight: FontWeight.w500,
+				),
+			),
 
-              InkWell(
-                onTap: () {
-                  openFeedbackMenu();
-                },
-                borderRadius: BorderRadius.circular(20),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 2,
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.chat_bubble_outline_rounded,
-                        size: 13,
-                        color: const Color(0xFF8FD8FF).withOpacity(0.50),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        "Feedback",
-                        style: TextStyle(
-                          color: const Color(0xFF8FD8FF).withOpacity(0.50),
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    ),
+		const SizedBox(height: 4),
 
-    const SizedBox(width: 12),
+		Row(
+			children: [
 
-    if (!_isPremium)
-      ElevatedButton(
-        onPressed: _buy,
-        child: const Text("Go Premium"),
-      ),
-  ],
+				InkWell(
+					onTap: () {
+						openFeedbackMenu();
+					},
+					borderRadius: BorderRadius.circular(20),
+					child: Padding(
+						padding: const EdgeInsets.symmetric(
+							horizontal: 4,
+							vertical: 2,
+						),
+						child: Row(
+							children: [
+								Icon(
+									Icons.chat_bubble_outline_rounded,
+									size: 13,
+									color: const Color(0xFF8FD8FF).withOpacity(0.50),
+								),
+								const SizedBox(width: 4),
+								Text(
+									"Feedback",
+									style: TextStyle(
+										color: const Color(0xFF8FD8FF).withOpacity(0.50),
+										fontSize: 11,
+										fontWeight: FontWeight.w500,
+									),
+								),
+							],
+						),
+					),
+				),
+
+				const SizedBox(width: 10),
+
+				InkWell(
+					onTap: () async {
+	final Uri url = Uri.parse(
+		'https://play.google.com/store/apps/details?id=com.lynra.greynote',
+	);
+
+	await launchUrl(
+		url,
+		mode: LaunchMode.externalApplication,
+	);
+},
+					borderRadius: BorderRadius.circular(20),
+					child: Padding(
+						padding: const EdgeInsets.symmetric(
+							horizontal: 4,
+							vertical: 2,
+						),
+						child: Row(
+							children: [
+								Icon(
+									Icons.apps_rounded,
+									size: 13,
+									color: const Color(0xFF8FD8FF).withOpacity(0.50),
+								),
+								const SizedBox(width: 4),
+								Text(
+									"Other Apps",
+									style: TextStyle(
+										color: const Color(0xFF8FD8FF).withOpacity(0.50),
+										fontSize: 11,
+										fontWeight: FontWeight.w500,
+									),
+								),
+							],
+						),
+					),
+				),
+
+			],
+		),
+	],
 ),
+													
+												),
+												const SizedBox(width: 12),
+												if (!_isPremium)
+													ElevatedButton(
+														onPressed: _buy,
+														child: const Text("Go Premium"),
+													),
+											],
+										),
 										
 									),
 								),
@@ -1061,19 +1103,15 @@ void openFeedbackMenu() {
                 icon: Icons.star_rounded,
                 title: "Rate on Play Store",
                 onTap: () async {
-  Navigator.pop(context);
-
-  final Uri url = Uri.parse(
-    //"https://play.google.com/store/apps/details?id=com.akinik.findlostgadget",
-		
-		"https://play.google.com/store/apps/details?id=com.akinik.findlostgadget.app&pli=1",
-  );
-
-  await launchUrl(
-    url,
-    mode: LaunchMode.externalApplication,
-  );
-},
+									Navigator.pop(context);
+									final Uri url = Uri.parse(
+										"https://play.google.com/store/apps/details?id=com.akinik.findlostgadget.app&pli=1",
+									);
+									await launchUrl(
+										url,
+										mode: LaunchMode.externalApplication,
+									);
+								},
               ),
 
               const SizedBox(height: 12),
