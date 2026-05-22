@@ -23,7 +23,9 @@ import 'pages/find_mode_page.dart';
 void main() async {
   // Flutter binding'lerini hazırla (Async işlemler için şart)
   WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-
+	await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
   runApp(const FindLostGadgetApp());
 }
 
