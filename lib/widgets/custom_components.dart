@@ -269,6 +269,7 @@ class EmptyStatePlayful extends StatelessWidget {
 class DeviceCardPlayful extends StatelessWidget {
   final String title;
   final String id;
+	final IconData leadingIcon;
   final Color accent;
   final bool stale;
   final int? rssi;
@@ -284,6 +285,7 @@ class DeviceCardPlayful extends StatelessWidget {
   const DeviceCardPlayful({
     required this.title,
     required this.id,
+		required this.leadingIcon,
     required this.accent,
     required this.stale,
     required this.rssi,
@@ -345,7 +347,7 @@ return _PressableScale(
 ],
                       ),
                       child: Icon(
-                        Icons.bluetooth,
+                        leadingIcon,
                         color: Colors.white.withValues(alpha: stale ? 0.35 : 0.85),
                         size: 20,
                       ),

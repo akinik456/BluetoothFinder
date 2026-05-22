@@ -25,6 +25,15 @@ import 'find_mode_page.dart';
 
 // ===================== HOME =====================
 
+enum DeviceType {
+  audio,
+  watch,
+  speaker,
+  phone,
+  computer,
+  unknown,
+}
+
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -379,6 +388,76 @@ void didChangeAppLifecycleState(AppLifecycleState state) {
     if (rssi >= -90) return const Color(0xFFF59E0B);
     return const Color(0xFFEF4444);
   }
+	
+DeviceType detectDeviceType(String name) {
+  final n = name.toLowerCase();
+
+  // AUDIO
+  if (n.contains('airpods') ||
+      n.contains('buds') ||
+      n.contains('earbuds') ||
+      n.contains('headphone') ||
+      n.contains('headset') ||
+      n.contains('sony') ||
+      n.contains('bose')) {
+    return DeviceType.audio;
+  }
+
+  // WATCH / BAND
+  if (n.contains('watch') ||
+      n.contains('band') ||
+      n.contains('fit')) {
+    return DeviceType.watch;
+  }
+
+  // SPEAKER
+  if (n.contains('speaker') ||
+      n.contains('jbl') ||
+      n.contains('flip') ||
+      n.contains('boom')) {
+    return DeviceType.speaker;
+  }
+
+  // PHONE
+  if (n.contains('iphone') ||
+      n.contains('galaxy') ||
+      n.contains('redmi') ||
+      n.contains('phone')) {
+    return DeviceType.phone;
+  }
+
+  // COMPUTER
+  if (n.contains('macbook') ||
+      n.contains('laptop') ||
+      n.contains('pc') ||
+      n.contains('windows')) {
+    return DeviceType.computer;
+  }
+
+  return DeviceType.unknown;
+}
+
+IconData getDeviceTypeIcon(DeviceType type) {
+  switch (type) {
+    case DeviceType.audio:
+      return Icons.headphones_rounded;
+
+    case DeviceType.watch:
+      return Icons.watch_rounded;
+
+    case DeviceType.speaker:
+      return Icons.speaker_rounded;
+
+    case DeviceType.phone:
+      return Icons.smartphone_rounded;
+
+    case DeviceType.computer:
+      return Icons.laptop_rounded;
+
+    case DeviceType.unknown:
+      return Icons.bluetooth_rounded;
+  }
+}
 
 
   double _rssiToFill(int rssi) {
@@ -419,12 +498,20 @@ Widget _buildDeviceCard(String id, ScanResult? r, int now) {
   final smoothRssi = (smooth == null) ? r?.rssi : smooth.round();
 
   final String title = (() {
-    final n = r?.device.platformName.trim();
-    if (n != null && n.isNotEmpty) return n;
-    final sn = saved?.name?.trim();
-    if (sn != null && sn.isNotEmpty) return sn;
-    return "Unknown";
-  })();
+  final n = r?.device.platformName.trim();
+  if (n != null && n.isNotEmpty) return n;
+
+  final advName = r?.advertisementData.advName.trim();
+  if (advName != null && advName.isNotEmpty) return advName;
+
+  final sn = saved?.name?.trim();
+  if (sn != null && sn.isNotEmpty) return sn;
+
+  return "Unknown";
+})();
+	
+	final type = detectDeviceType(title);
+final typeIcon = getDeviceTypeIcon(type);
 
   final Color accent = (smoothRssi == null)
       ? Colors.white.withValues(alpha: 0.35)
@@ -460,6 +547,7 @@ Widget _buildDeviceCard(String id, ScanResult? r, int now) {
   return DeviceCardPlayful(
     title: title,
     id: id,
+		leadingIcon: typeIcon,
     accent: accent,
     stale: stale,
     rssi: smoothRssi,
