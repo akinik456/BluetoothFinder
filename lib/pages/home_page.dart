@@ -80,7 +80,8 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
 
   final Set<String> _seenThisSession = <String>{};
 	String _appVersion = '';
-
+	final Set<String> _freshDevices = <String>{};
+	
 @override
   void initState() {
     super.initState();
@@ -137,10 +138,22 @@ unawaited(_restorePurchases());
         final id = r.device.remoteId.str;
 
 
-        _seenThisSession.add(id);
+				if (!_seenThisSession.contains(id)) {
+  _seenThisSession.add(id);
+
+  _freshDevices.add(id);
+
+  Future.delayed(const Duration(milliseconds: 1400), () {
+    if (!mounted) return;
+
+    setState(() {
+      _freshDevices.remove(id);
+    });
+  });
+}
         _latest[id] = r;
         _lastSeenMs[id] = now;
-		if (_isPremium) {
+		if (_hasFullAccess) {
   _watchdog.markSeen();
 }
 
@@ -241,7 +254,7 @@ Future<void> _initTrial() async {
     await prefs.setInt(key, start);
   }
 
-  const trialDurationMs = 7 * 24 * 60 * 60 * 1000;//15 * 24 * 60 * 60 * 1000; // 15 gün
+  const trialDurationMs = 7 * 24 * 60 * 60 * 1000;//15 * 24 * 60 * 60 * 1000; // 7 gün
 
   final active = (now - start) < trialDurationMs;
 	final remainingMs = trialDurationMs - (now - start);
@@ -488,7 +501,7 @@ void _toggleExpanded(String id) {
 Widget _buildDeviceCard(String id, ScanResult? r, int now) {
   final saved = _saved[id];
   final isSaved = saved != null;
-
+	final isFresh = _freshDevices.contains(id);
   final seenThisSession = _seenThisSession.contains(id);
 
   final hasEverBeenSeen = _lastSeenMs.containsKey(id);
@@ -548,6 +561,7 @@ final typeIcon = getDeviceTypeIcon(type);
     title: title,
     id: id,
 		leadingIcon: typeIcon,
+		isFresh: isFresh,
     accent: accent,
     stale: stale,
     rssi: smoothRssi,
@@ -997,8 +1011,7 @@ final limitedNearbyIds = _hasFullAccess
 											borderRadius: BorderRadius.circular(18),
 											border: Border.all(
 												color: Colors.white.withValues(alpha: 0.12),
-											),
-											
+											),											
 										),
 										child: Row(
 											children: [

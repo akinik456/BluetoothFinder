@@ -281,6 +281,7 @@ class DeviceCardPlayful extends StatelessWidget {
   final Widget? details;
   final bool isSaved;
   final VoidCallback onToggleSaved;
+	final bool isFresh;
   
   const DeviceCardPlayful({
     required this.title,
@@ -297,7 +298,7 @@ class DeviceCardPlayful extends StatelessWidget {
     required this.details,
 	required this.isSaved,
 	required this.onToggleSaved,
-	
+	required this.isFresh,
   });
 
   @override
@@ -323,7 +324,17 @@ return _PressableScale(
       width: 3,
       color: isSaved ? const Color(0xFFFFD166) : Colors.transparent,
     ),
+		
   ),
+	boxShadow: isFresh
+      ? [
+          BoxShadow(
+            color: accent.withOpacity(0.30),
+            blurRadius: 18,
+            spreadRadius: 1,
+          ),
+        ]
+      : [],
 ),
         child: Column(
           children: [
