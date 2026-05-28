@@ -138,7 +138,7 @@ BeepGuard.killNow();
   }
 }
 
-    _sub = FlutterBluePlus.scanResults.listen((results) {
+    _sub = FlutterBluePlus.onScanResults.listen((results) {
   final now = DateTime.now().millisecondsSinceEpoch;
   
   for (final r in results) {
@@ -194,10 +194,14 @@ BeepGuard.killNow();
       final stale = ageMs > staleAfterMs;
 
       // If not seeing device -> SILENCE (invalidate RSSI)
+			
       if (!hasSeen || stale || _rssi == null) {
-        _rssi = null;
-        return;
-      }
+  if (_rssi != null) {
+    _rssi = null;
+    if (mounted) setState(() {});
+  }
+  return;
+}
 
       // Logarithmic mapping in [_minRssi .. _calMaxRssi]
       final progress = _rssiToLogProgress(_rssi!);
