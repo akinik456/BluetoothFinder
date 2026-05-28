@@ -303,6 +303,22 @@ await _player.play(
     return "VERY FAR";
   }
 
+
+double _rssiToGaugeSweep(int rssi) {
+  final minRssi = _minRssi;
+  var maxRssi = _calMaxRssi;
+
+  if (maxRssi <= minRssi + 1) {
+    maxRssi = minRssi + 1;
+  }
+
+  final clamped = rssi.clamp(minRssi, maxRssi);
+  final t = (clamped - minRssi) / (maxRssi - minRssi);
+
+  // biraz daha agresif yakın hissi
+  return Curves.easeOutCubic.transform(t);
+}
+
   @override
 Widget build(BuildContext context) {
   SystemChrome.setSystemUIOverlayStyle(
@@ -458,7 +474,7 @@ Widget build(BuildContext context) {
                             ),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      /*const SizedBox(height: 12),
                       Text(
                         show ? "$rssi dBm" : "—",
                         style: TextStyle(
@@ -466,16 +482,58 @@ Widget build(BuildContext context) {
                           fontSize: 48,
                           fontWeight: FontWeight.w900,
                         ),
-                      ),
+                      ),*/
                       const SizedBox(height: 14),
-                      // ... (Geri kalan bar ve saniye bilgileri) ...
+                      
+											
+											SizedBox(
+   width: double.infinity,
+	height: 220,
+  child: TweenAnimationBuilder<double>(
+    tween: Tween(
+      begin: 0,
+      end: show ? fill : 0,
+    ),
+    duration: const Duration(milliseconds: 180),
+    builder: (context, value, _) {
+      return CustomPaint(
+        painter: _SignalGaugePainter(
+          progress: value,
+          color: color,
+        ),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 42),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  show ? "$rssi dBm" : "—",
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 44,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  ),
+),
+
+											// ... (Geri kalan bar ve saniye bilgileri) ...
                       Row(
                         children: [
-                          Text("$_minRssi", style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 11, fontWeight: FontWeight.w700)),
+                          Text("$_minRssi", style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 22, fontWeight: FontWeight.w700)),
                           const Spacer(),
-                          Text("$_calMaxRssi", style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 11, fontWeight: FontWeight.w700)),
+                          Text("$_calMaxRssi", style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 22, fontWeight: FontWeight.w700)),
                         ],
                       ),
+
+const SizedBox(height: 12),
                       const SizedBox(height: 4),
                       Container(
                         width: double.infinity,
@@ -525,5 +583,87 @@ Widget build(BuildContext context) {
 	
   );
 }
-}
 
+}
+class _SignalGaugePainter extends CustomPainter {
+  final double progress;
+  final Color color;
+
+  _SignalGaugePainter({
+    required this.progress,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final strokeBg = Paint()
+      ..color = Colors.white.withValues(alpha: 0.06)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 18
+      ..strokeCap = StrokeCap.round;
+
+    final strokeFg = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 18
+      ..strokeCap = StrokeCap.round;
+
+    final thinLine = Paint()
+      ..color = color.withValues(alpha: 0.9)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
+
+    final glow = Paint()
+      ..color = color.withValues(alpha: 0.18)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 22);
+
+    final center = Offset(size.width / 2, size.height * 0.82);
+
+    final double radius =
+    math.min(size.width * 0.34, 128).toDouble();
+
+    final rect = Rect.fromCircle(
+      center: center,
+      radius: radius,
+    );
+
+    const startAngle = math.pi;
+    const sweepAngle = math.pi;
+
+    // glow
+    canvas.drawArc(
+      rect.inflate(2),
+      startAngle,
+      sweepAngle * progress,
+      false,
+      glow,
+    );
+
+    // background
+    canvas.drawArc(
+      rect,
+      startAngle,
+      sweepAngle,
+      false,
+      strokeBg,
+    );
+
+    // foreground
+    canvas.drawArc(
+      rect,
+      startAngle,
+      sweepAngle * progress,
+      false,
+      strokeFg,
+    );
+
+    
+  }
+
+  @override
+  bool shouldRepaint(covariant _SignalGaugePainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.color != color;
+  }
+}
