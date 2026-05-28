@@ -404,7 +404,7 @@ Widget build(BuildContext context) {
                       onTap: () => Navigator.pop(context),
                     ),
                     const SizedBox(width: 10),
-                    Expanded(
+                    /*Expanded(
                       child: Text(
                         widget.deviceName,
                         maxLines: 1,
@@ -416,7 +416,20 @@ Widget build(BuildContext context) {
                           letterSpacing: 0.3,
                         ),
                       ),
-                    ),
+                    ),*/
+										Expanded(
+  child: Text(
+    "   Find Lost Gadget By Lynra",
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: TextStyle(
+      color: Color(0xFF22D3EE),//Colors.white.withValues(alpha: 0.82),
+      fontSize: 22,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 0.4,
+    ),
+  ),
+),
                     const SizedBox(width: 10),
                     ValueListenableBuilder<bool>(
                       valueListenable: globalMute,
@@ -456,6 +469,19 @@ Widget build(BuildContext context) {
                               ),
                             ),
                           ),*/
+													Expanded(
+  child: Text(
+    widget.deviceName,
+    maxLines: 1,
+    overflow: TextOverflow.ellipsis,
+    style: const TextStyle(
+      color: Colors.white,
+      fontSize: 18.5,
+      fontWeight: FontWeight.w900,
+      letterSpacing: 0.3,
+    ),
+  ),
+),
                           if (_calibrating)
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
