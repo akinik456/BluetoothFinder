@@ -445,7 +445,7 @@ Widget build(BuildContext context) {
                       // ... (Mevcut PlayCard içeriğin aynen kalıyor) ...
                       Row(
                         children: [
-                          Expanded(
+                          /*Expanded(
                             child: Text(
                               label,
                               style: TextStyle(
@@ -455,7 +455,7 @@ Widget build(BuildContext context) {
                                 letterSpacing: 1.0,
                               ),
                             ),
-                          ),
+                          ),*/
                           if (_calibrating)
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -500,6 +500,7 @@ Widget build(BuildContext context) {
         painter: _SignalGaugePainter(
           progress: value,
           color: color,
+					label: label,
         ),
         child: Center(
           child: Padding(
@@ -588,10 +589,12 @@ const SizedBox(height: 12),
 class _SignalGaugePainter extends CustomPainter {
   final double progress;
   final Color color;
+	final String label;
 
   _SignalGaugePainter({
     required this.progress,
     required this.color,
+		required this.label,
   });
 
   @override
@@ -657,7 +660,26 @@ class _SignalGaugePainter extends CustomPainter {
       false,
       strokeFg,
     );
+final labelPainter = TextPainter(
+  text: TextSpan(
+    text: label,
+    style: TextStyle(
+      color: color,
+      fontSize: 16,
+      fontWeight: FontWeight.w900,
+      letterSpacing: 1.0,
+    ),
+  ),
+  textDirection: TextDirection.ltr,
+)..layout();
 
+labelPainter.paint(
+  canvas,
+  Offset(
+    (size.width - labelPainter.width) / 2,
+    size.height * 0.05,
+  ),
+);
     
   }
 
@@ -665,5 +687,6 @@ class _SignalGaugePainter extends CustomPainter {
   bool shouldRepaint(covariant _SignalGaugePainter oldDelegate) {
     return oldDelegate.progress != progress ||
         oldDelegate.color != color;
+				oldDelegate.label != label;
   }
 }
