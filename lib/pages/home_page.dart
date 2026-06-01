@@ -82,6 +82,9 @@ double _calMaxRssi = -45;   // kalibre edilmiş en güçlü sinyal
 	String _appVersion = '';
 	final Set<String> _freshDevices = <String>{};
 	
+	int _lastListRefreshMs = 0;
+	static const int _listRefreshIntervalMs = 800;
+	
 @override
   void initState() {
     super.initState();
@@ -164,7 +167,13 @@ unawaited(_restorePurchases());
         _rssiEma[id] = (prev == null) ? raw : (alpha * raw) + ((1 - alpha) * prev);
       }
 	  
-	  
+			// scan verilerini hızlı güncelle
+			// _latest, _lastSeenMs, _rssiEma burada güncellendi
+
+			if (now - _lastListRefreshMs < _listRefreshIntervalMs) {
+				return;
+			}
+			_lastListRefreshMs = now;
 
       // housekeeping
       _orderIds.removeWhere((id) => !_latest.containsKey(id));
@@ -194,7 +203,13 @@ unawaited(_restorePurchases());
         _orderIds.insert(0, ex);
       }
 
-      if (mounted) setState(() {});
+      if (!mounted) return;
+
+if (_expandedId != null) {
+  return;
+}
+
+setState(() {});
     });
 		
 		_adapterStateSub = FlutterBluePlus.adapterState.listen((state) async {

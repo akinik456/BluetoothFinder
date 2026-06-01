@@ -542,7 +542,7 @@ Widget build(BuildContext context) {
                   show ? "$rssi dBm" : "—",
                   style: TextStyle(
                     color: color,
-                    fontSize: 44,
+                    fontSize: 36,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
